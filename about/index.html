@@ -20,15 +20,15 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="Rocky Shi works on AI infrastructure: LLM serving and GPU performance.">
+    <meta name="description" content="I’m Rocky Shi, a software engineer in the San Francisco Bay Area. For more than ten years I have built real-time audio systems: speech enhancement, spatial audio, and audio sync across devices. The pa">
 <meta property="og:type" content="website">
 <meta property="og:title" content="About">
 <meta property="og:url" content="https://rockyshi.dev/about/index.html">
 <meta property="og:site_name" content="Rocky Shi">
-<meta property="og:description" content="Rocky Shi works on AI infrastructure: LLM serving and GPU performance.">
+<meta property="og:description" content="I’m Rocky Shi, a software engineer in the San Francisco Bay Area. For more than ten years I have built real-time audio systems: speech enhancement, spatial audio, and audio sync across devices. The pa">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2026-10-10T18:22:24.000Z">
-<meta property="article:modified_time" content="2026-10-10T19:27:12.729Z">
+<meta property="article:modified_time" content="2026-10-11T04:39:20.017Z">
 <meta property="article:author" content="Rocky Shi">
 <meta name="twitter:card" content="summary">
 
@@ -122,7 +122,7 @@
   
   <aside class="sidebar">
 
-    <div class="sidebar-inner sidebar-overview-active">
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
       <ul class="sidebar-nav">
         <li class="sidebar-nav-toc">
           Table of Contents
@@ -135,6 +135,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#What-I%E2%80%99ve-built"><span class="nav-number">1.</span> <span class="nav-text">What I’ve built</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Research"><span class="nav-number">2.</span> <span class="nav-text">Research</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Patents"><span class="nav-number">3.</span> <span class="nav-text">Patents</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Contact"><span class="nav-number">4.</span> <span class="nav-text">Contact</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -192,7 +193,59 @@
       
       
       <div class="post-body">
-          <p>Rocky Shi works on AI infrastructure: LLM serving and GPU performance.</p>
+          <p>I’m Rocky Shi, a software engineer in the San Francisco Bay Area. For more than ten years I
+have built real-time audio systems: speech enhancement, spatial audio, and audio sync across
+devices. The part I enjoyed most was writing an inference engine that runs speech models on
+users’ own devices, where the job is to make a model meet a hard deadline on ordinary hardware.</p>
+<p>Lately I have been taking that work to large language models, where the deadline is the first
+token instead of the next audio frame and the hardware is a rack of GPUs instead of a laptop.</p>
+<p>This blog covers both sides: real-time audio and speech AI, and AI infrastructure such as LLM
+serving and GPU performance. Posts are built on measurements I can reproduce, showing where the
+time actually goes, how each number was taken, and what changed after a fix. When a measurement
+turns up a bug in an open-source project, I report it upstream and link the issue or pull
+request.</p>
+<h2 id="What-I’ve-built">What I’ve built</h2>
+<ul>
+<li><strong>Spatial audio for video meetings.</strong> Technical lead. Each speaker’s voice is rendered from
+their position on screen and the listener’s head pose through HRTF filtering, with
+transitions that stay click-free during fast head movement. Shipped in a widely used
+video-conferencing desktop app, and patented.</li>
+<li><strong>Multi-device audio sync for hybrid rooms.</strong> Aligns microphones on several devices in one
+room to sub-frame accuracy using NTP clocks, without decoding or re-encoding the streams.
+Released to customers in 2025; two patent applications published.</li>
+<li><strong>An on-device inference engine.</strong> A C++ engine inside a commercial audio SDK that runs speech
+enhancement, noise suppression and lip-sync models in real time on users’ own machines.</li>
+<li><strong>A handheld acoustic camera.</strong> Real-time beamforming and acoustic imaging for arrays of up
+to 128 microphones at 96 kHz, at more than 60 frames per second on an NVIDIA Jetson Nano with
+NEON and CUDA. The code became the basis of CRYSOUND’s CRY2600 acoustic imagers, which are
+used to find gas leaks and electrical faults in industrial plants.</li>
+</ul>
+<h2 id="Research">Research</h2>
+<p>Sole-author work on how real-world audio codecs change what speech-AI security systems see:</p>
+<ul>
+<li><em>Same Bits, Different Verdict: The Decoder in Speech Deepfake Detection.</em> Preprint, 2026;
+under review at IEEE Signal Processing Letters.
+<a target="_blank" rel="noopener" href="https://doi.org/10.6084/m9.figshare.34018134">doi:10.6084/m9.figshare.34018134</a></li>
+<li><em>Clean Accuracy Does Not Guarantee Provenance Robustness: A Prospective Codec-Stress
+Evaluation of Audio Attribution.</em> arXiv, 2026.
+<a target="_blank" rel="noopener" href="https://doi.org/10.48550/arXiv.2609.07981">doi:10.48550/arXiv.2609.07981</a></li>
+</ul>
+<h2 id="Patents">Patents</h2>
+<ul>
+<li><em>Spatial audio system for videoconferencing.</em> US 12,726,373 B1, issued 2026.</li>
+<li><em>Acoustic echo cancellation for multi-microphone conference systems.</em>
+<a target="_blank" rel="noopener" href="https://patents.google.com/patent/US20260246660A1/en">US 2026/0246660 A1</a>, 2026.</li>
+<li><em>Maintaining audio quality during periods of missing data for multi-microphone systems.</em>
+<a target="_blank" rel="noopener" href="https://patents.google.com/patent/US20260246895A1/en">US 2026/0246895 A1</a>, 2026.</li>
+<li><em>Device and method for enhancing target voice.</em>
+<a target="_blank" rel="noopener" href="https://patents.google.com/patent/CN107221336B/en">CN 107221336 B</a>, granted 2020.</li>
+<li><em>Multi-directional independent recording and voice interaction device.</em>
+<a target="_blank" rel="noopener" href="https://patents.google.com/patent/CN207352968U/en">CN 207352968 U</a> (utility model), 2018.</li>
+</ul>
+<h2 id="Contact">Contact</h2>
+<p>Email <a href="mailto:hi@rockyshi.dev">hi@rockyshi.dev</a>, or find me on
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev">GitHub</a> and
+<a target="_blank" rel="noopener" href="https://linkedin.com/in/rocky-shi-2676271bb">LinkedIn</a>.</p>
 
       </div>
       
