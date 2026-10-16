@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="On RTX 4090s without peer-to-peer, every configuration of vLLM v0.30.0&#39;s default KV-cache connector (NIXL) moves the cache at 0.4-0.8 GB&#x2F;s, under 7% of what a plain pinned copy between the same two GP">
+<meta property="og:type" content="article">
+<meta property="og:title" content="KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB&#x2F;s">
+<meta property="og:url" content="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="On RTX 4090s without peer-to-peer, every configuration of vLLM v0.30.0&#39;s default KV-cache connector (NIXL) moves the cache at 0.4-0.8 GB&#x2F;s, under 7% of what a plain pinned copy between the same two GP">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/handoff.svg">
+<meta property="article:published_time" content="2026-10-16T16:30:42.000Z">
+<meta property="article:modified_time" content="2026-10-16T16:30:42.468Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/handoff.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/","path":"posts/vllm-kv-handoff-without-p2p/","title":"KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB/s"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB/s | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#How-I-measured"><span class="nav-number">2.</span> <span class="nav-text">How I measured</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Results"><span class="nav-number">3.</span> <span class="nav-text">Results</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-each-configuration-actually-did"><span class="nav-number">4.</span> <span class="nav-text">What each configuration actually did</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Four-pairs-at-once"><span class="nav-number">5.</span> <span class="nav-text">Four pairs at once</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-this-means"><span class="nav-number">6.</span> <span class="nav-text">What this means</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">7.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">2</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB&#x2F;s | Rocky Shi">
+      <meta itemprop="description" content="On RTX 4090s without peer-to-peer, every configuration of vLLM v0.30.0&#39;s default KV-cache connector (NIXL) moves the cache at 0.4-0.8 GB&#x2F;s, under 7% of what a plain pinned copy between the same two GPUs reaches.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB/s
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-16 09:30:42" itemprop="dateCreated datePublished" datetime="2026-10-16T09:30:42-07:00">2026-10-16</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">On RTX 4090s without peer-to-peer, every configuration of vLLM v0.30.0's default KV-cache connector (NIXL) moves the cache at 0.4-0.8 GB/s, under 7% of what a plain pinned copy between the same two GPUs reaches.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>In the <a href="/posts/host-gpu-bandwidth-without-p2p/">previous post</a> I measured how fast data can move
+between host memory and the GPUs of an 8x RTX 4090 server that has no GPU peer-to-peer. A pinned
+copy from one GPU down to host memory and then up to another GPU runs at about 12.9 GB/s. That
+is the budget for handing a KV cache from a prefill GPU to a decode GPU on this machine.</p>
+<p>This post measures what vLLM actually gets. The answer: every configuration of vLLM v0.30.0’s
+default KV-cache connector moves the cache at <strong>0.4 to 0.8 GB/s</strong>, less than 7% of that budget. For a
+28,672-token prompt, splitting prefill and decode across two GPUs adds 2.1 to 3.7 seconds to the
+time to first token. A pinned copy of the same KV bytes takes 0.13 seconds.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<ul>
+<li>vLLM v0.30.0 (the CUDA 12.9 build), NIXL 1.4.1, NVIDIA driver 550.144.03.</li>
+<li>Qwen2.5-7B-Instruct in bf16. Its KV cache takes 57,344 bytes per token (28 layers, keys and
+values, 4 KV heads of 128 values, 2 bytes each).</li>
+<li>Prefill on GPU 4, decode on GPU 5. Both are on the same CPU socket and behind the same PCIe
+switch, and they cannot copy to each other directly.</li>
+<li>All server settings are vLLM defaults except the handoff configuration and one more: every
+server, including the single-GPU reference below, uses the same KV-cache memory layout
+(<code>VLLM_KV_CACHE_LAYOUT=LBHNC</code>, the one the connector forces), so all of them run the same
+kernels. Servers are bound to the GPUs’ CPU socket and its memory.</li>
+</ul>
+<p>I tested the configurations of vLLM’s default connector, NIXL, that apply here. vLLM also ships
+other connectors (Mooncake, LMCache), which I did not test.</p>
+<table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Configuration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>pull (default)</td>
+<td><code>NixlConnector</code>, the documented default</td>
+</tr>
+<tr>
+<td>pull, zero-copy on</td>
+<td>the same, with <code>UCX_CUDA_IPC_ENABLE_GET_ZCOPY=on</code></td>
+</tr>
+<tr>
+<td>push</td>
+<td><code>NixlPushConnector</code></td>
+</tr>
+<tr>
+<td>host buffer</td>
+<td><code>NixlConnector</code> with <code>kv_buffer_device: cpu</code></td>
+</tr>
+<tr>
+<td>host buffer over TCP</td>
+<td>the same, restricted to <code>UCX_TLS=tcp</code></td>
+</tr>
+</tbody>
+</table>
+<p>The last one is the configuration reported to work on Intel Arc GPUs, where no direct path
+exists either (<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/issues/53796">vLLM issue #53796</a>).</p>
+<p>Requests go through the proxies in the vLLM tree. For every configuration except push, the proxy
+sends the request to the prefill server, waits for it, then sends it to the decode server. The
+push demo proxy sends both at once.</p>
+<h2 id="How-I-measured">How I measured</h2>
+<p>Each request carries a prompt of exactly 2,048, 8,192 or 28,672 tokens, sent as token ids so
+that tokenization plays no part, and asks for 8 output tokens. One request is in flight at a
+time. Each configuration gets 20 requests per prompt length, and its time for that length in a
+round is the mean of the 20. The whole set is repeated in five rounds. In every round the single-GPU reference and host buffer over TCP run first, and the
+other four configurations follow in a fresh random order.</p>
+<p>The same prompts are also sent to a single vLLM instance on GPU 4, once normally and once again
+right after, when the whole prompt is already in the prefix cache. The first gives the time to
+first token without any handoff. The second gives the cost of the decode side’s own work, which
+a split setup also pays.</p>
+<p>The extra time to first token in a split setup is the handoff plus some fixed costs. To get a
+bandwidth, I take the difference between the 28,672-token and the 8,192-token prompts: the extra
+time grows by some amount while the KV cache grows by 1.17 GB, and the ratio is the bandwidth.
+Fixed costs cancel out. Each configuration gets a low and a high reading, from counting the
+decode side’s own work as part of the handoff or not.</p>
+<p>Checks on every round, all passed:</p>
+<ul>
+<li>the handoff counters on the servers show exactly the expected bytes (tokens x 57,344) for every
+request;</li>
+<li>the 8 output tokens match the single-instance output on 59 of 60 prompts, the same rate at
+which the single instance’s prefix-cached run matches its normal run;</li>
+<li>no other process uses GPUs 4 to 7, and other processes take at most 0.3% of the socket’s CPU
+time;</li>
+<li>the pinned copy between the two GPUs is measured at the start and end of each round and stays
+between 12.74 and 12.89 GB/s.</li>
+</ul>
+<h2 id="Results">Results</h2>
+<img src="/posts/vllm-kv-handoff-without-p2p/handoff.svg" class="" title="Extra time to first token " alt="For a 28,672-token prompt, the five shipped handoff configurations add between 2.08 and 3.71 seconds to the time to first token, while a pinned copy of the same 1.64 GB of KV cache down and back up takes 0.13 seconds.">
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>Time to first token, 28,672 tokens</th>
+<th>Extra over one GPU</th>
+<th>Handoff bandwidth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>one GPU, no handoff</td>
+<td>3.80 s</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>host buffer</td>
+<td>5.89 s</td>
+<td>2.08 s</td>
+<td>0.74-0.80 GB/s</td>
+</tr>
+<tr>
+<td>pull, zero-copy on</td>
+<td>6.67 s</td>
+<td>2.87 s</td>
+<td>0.60-0.63 GB/s</td>
+</tr>
+<tr>
+<td>pull (default)</td>
+<td>6.68 s</td>
+<td>2.88 s</td>
+<td>0.59-0.63 GB/s</td>
+</tr>
+<tr>
+<td>host buffer over TCP</td>
+<td>6.87 s</td>
+<td>3.07 s</td>
+<td>0.51-0.55 GB/s</td>
+</tr>
+<tr>
+<td>push</td>
+<td>7.51 s</td>
+<td>3.71 s</td>
+<td>0.42-0.45 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p>Times are the median over five rounds of each round’s mean. Each bandwidth range runs from the
+lowest low reading to the highest high reading over the five rounds; no reading moved by more
+than 0.025 GB/s between rounds. I use the mean of the 20 requests rather than their median
+because at 28,672 tokens some configurations’ times fall into two groups (push slows down on
+every fourth request, see below, and pull is faster on some prompts than on others), and a
+median of such a set jumps from one group to the other between rounds. The extra time includes the decode side’s own work (0.13 s at this length), which any
+split setup pays, so it is not all handoff.</p>
+<p>The best configuration, the host buffer, reaches 6.2% of the 12.9 GB/s pinned copy. The
+documented default reaches 4.9%.</p>
+<h2 id="What-each-configuration-actually-did">What each configuration actually did</h2>
+<p>I started each configuration once more with UCX’s protocol logging on (<code>UCX_PROTO_INFO=y</code>) and
+read which transport carried the KV data:</p>
+<ul>
+<li><strong>Pull and push</strong> do not move the data GPU to GPU. UCX cannot open the other GPU’s memory
+(<code>cuIpcOpenMemHandle() failed: peer access is not supported between these two devices</code>), and
+the transfer runs over the TCP transport instead, with software emulation of the remote
+read or write.</li>
+<li><strong>Pull with zero-copy on</strong> removes the log line saying zero-copy is disabled, hits the same
+failure, and takes the same TCP path. It is a repeat of pull, not a GPU-direct measurement.</li>
+<li><strong>The host buffer</strong> moves the data between the two servers’ host memory with Linux cross
+memory attach (<code>cma</code>), not TCP. That step is fast: NIXL reports 1.64 GB moved in about 0.10
+seconds, about 16 GB/s. But it accounts for only about 5% of the extra 2.1 seconds. Most of
+the rest lies in steps this measurement does not time, such as copying the cache between each
+GPU and its host buffer.</li>
+<li><strong>Host buffer over TCP</strong> sends the host-to-host step through TCP as configured.</li>
+</ul>
+<p>Push shows one more thing. In push mode only, the prefill server logs “Releasing expired KV
+blocks … retrieved by 0 remote worker(s) before lease expired” 66 times per round: blocks it
+pushed are never marked as retrieved, so they are freed only when their 30-second lease runs
+out. At 28,672 tokens its KV pool holds only about four requests, so every fourth request waits
+for a lease to expire. I have not found why the
+pushed blocks are never marked as retrieved.</p>
+<h2 id="Four-pairs-at-once">Four pairs at once</h2>
+<p>On an eight-GPU machine you would run several prefill/decode pairs side by side, so I also ran
+the host-buffer configuration with up to four pairs handing off at the same moment, two per CPU
+socket.</p>
+<ul>
+<li>With four pairs running, the pair on GPUs 4 and 5 kept 96% to 104% of the bandwidth it had
+alone, in every round.</li>
+<li>Pairing a prefill GPU with a decode GPU on the other socket, instead of the same socket, made
+no difference: the ratio stayed between 0.98 and 1.01.</li>
+</ul>
+<p>Neither is surprising at these rates. With four pairs copying at once, a pinned copy on the
+GPU 4 to GPU 5 path still reaches 6.46 GB/s, 8 to 9 times what the handoff uses. The shared
+PCIe path has plenty of headroom, so the limit is in the handoff software, not in the shared
+hardware.</p>
+<h2 id="What-this-means">What this means</h2>
+<p>On PCIe GPUs without peer-to-peer, splitting prefill and decode with vLLM v0.30.0 makes long
+prompts slower to start, by seconds, and the reason is not PCIe. A plain pinned copy through
+host memory moves the same cache in about a tenth of a second, a factor of about 16 in
+bandwidth over the best shipped configuration. Building that pinned, host-staged handoff is what
+I am working on next.</p>
+<p>These numbers describe the v0.30.0 release; I will measure the main branch alongside any change
+of my own.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The benchmark, with every check above built in, is at
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/kv-handoff-bench">rockyshi-dev/kv-handoff-bench</a>. Its README has
+the exact commands for both parts and the numbers they give on this machine, round by round.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/host-gpu-bandwidth-without-p2p/" rel="prev" title="Host-to-GPU bandwidth on an 8x RTX 4090 server without peer-to-peer">
+                  <i class="fa fa-angle-left"></i> Host-to-GPU bandwidth on an 8x RTX 4090 server without peer-to-peer
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
