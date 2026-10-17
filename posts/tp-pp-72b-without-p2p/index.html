@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens">
+<meta property="og:type" content="article">
+<meta property="og:title" content="TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer">
+<meta property="og:url" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/splits.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/results.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/tpot.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/ttft-c8.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/timesplit.svg">
+<meta property="article:published_time" content="2026-10-17T20:12:07.000Z">
+<meta property="article:modified_time" content="2026-10-17T20:12:08.005Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/splits.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/tp-pp-72b-without-p2p/","path":"posts/tp-pp-72b-without-p2p/","title":"TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-answer"><span class="nav-number">1.</span> <span class="nav-text">The answer</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#What-vLLM%E2%80%99s-documentation-says-and-how-this-bears-on-it"><span class="nav-number">1.1.</span> <span class="nav-text">What vLLM’s documentation says, and how this bears on it</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Two-things-to-read-with-the-table"><span class="nav-number">1.2.</span> <span class="nav-text">Two things to read with the table</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#How-it-was-measured"><span class="nav-number">2.</span> <span class="nav-text">How it was measured</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#The-output-check-and-why-it-first-lied"><span class="nav-number">2.1.</span> <span class="nav-text">The output check, and why it first lied</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-the-time-goes-at-c-1"><span class="nav-number">3.</span> <span class="nav-text">Where the time goes at c &#x3D; 1</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-I-expected-and-what-came-out"><span class="nav-number">4.</span> <span class="nav-text">What I expected, and what came out</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scope"><span class="nav-number">5.</span> <span class="nav-text">Scope</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer | Rocky Shi">
+      <meta itemprop="description" content="Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens, and throughput depends on load: vLLM&#39;s &quot;PP for higher throughput without NVLink&quot; holds at 32 concurrent requests and fails at 8.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-10-17 13:12:07 / Modified: 13:12:08" itemprop="dateCreated datePublished" datetime="2026-10-17T13:12:07-07:00">2026-10-17</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens, and throughput depends on load: vLLM's "PP for higher throughput without NVLink" holds at 32 concurrent requests and fails at 8.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>Qwen2.5-72B-Instruct in bf16 has 135.4 GiB of weights. A 24 GB RTX 4090 holds 22.07 GiB under vLLM’s default memory budget, so on a node of eight 4090s the model needs every card. There is no room for replicas. The only decision left is how to cut the model, and vLLM v0.30.0 offers three sensible cuts on eight cards:</p>
+<ul>
+<li><strong>TP8</strong>: every layer split eight ways. Each forward step runs 162 collectives over a ring that crosses both CPU sockets.</li>
+<li><strong>PP8</strong>: eight pipeline stages of 10 layers each. Activations hop seven times per forward pass, once across the sockets.</li>
+<li><strong>TP4xPP2</strong>: each half of the model (40 layers) split four ways over the four cards of one socket. All-reduces stay inside a socket; one hop crosses it.</li>
+</ul>
+<img src="/posts/tp-pp-72b-without-p2p/splits.svg" class="" title="Three splits " alt="Eight GPUs in two sockets. TP8: one group of eight, every layer split eight ways. TP4xPP2: two groups of four, one hop between them. PP8: eight stages of ten layers, seven hops.">
+<p>The node is the one from <a href="/posts/host-gpu-bandwidth-without-p2p/">the first post</a>: PCIe 4.0 x16 per card, no NVLink, and no GPU peer-to-peer on the stock driver, with GPUs 0-3 on socket 0 and 4-7 on socket 1. Every byte NCCL moves between cards is staged through host memory, and one socket carries about 25 GB/s from host to GPU in total.</p>
+<span id="more"></span>
+<h2 id="The-answer">The answer</h2>
+<p>Workload: 1,536 prompt tokens in, 128 tokens out, temperature 0, at 1, 8 and 32 concurrent requests. Values are medians over five rounds. Each arm’s round-to-round spread is under 2%, except where a range is given. Bold marks the cell winner: the arm that beat both others in all five rounds.</p>
+<table>
+<thead>
+<tr>
+<th>c</th>
+<th>Metric</th>
+<th>TP8</th>
+<th>TP4xPP2</th>
+<th>PP8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>median TTFT (s)</td>
+<td>1.78</td>
+<td>1.80</td>
+<td><strong>1.44</strong></td>
+</tr>
+<tr>
+<td>1</td>
+<td>median token gap (ms)</td>
+<td><strong>27.7</strong></td>
+<td>44.5</td>
+<td>152</td>
+</tr>
+<tr>
+<td>8</td>
+<td>median TTFT (s)</td>
+<td>5.28</td>
+<td>3.62</td>
+<td><strong>2.19-3.00</strong></td>
+</tr>
+<tr>
+<td>8</td>
+<td>median token gap (ms)</td>
+<td><strong>40.5</strong></td>
+<td>52.2</td>
+<td>159</td>
+</tr>
+<tr>
+<td>8</td>
+<td>output throughput (tok/s)</td>
+<td>53.7</td>
+<td><strong>65.4</strong></td>
+<td>41.5</td>
+</tr>
+<tr>
+<td>32</td>
+<td>median TTFT (s)</td>
+<td>9.32</td>
+<td>5.94</td>
+<td><strong>2.87</strong></td>
+</tr>
+<tr>
+<td>32</td>
+<td>median token gap (ms)</td>
+<td>69.2</td>
+<td>68.8</td>
+<td>178</td>
+</tr>
+<tr>
+<td>32</td>
+<td>output throughput (tok/s)</td>
+<td>63.7</td>
+<td>103</td>
+<td><strong>131</strong></td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/tp-pp-72b-without-p2p/results.svg" class="" title="Results " alt="Three panels against concurrency 1, 8 and 32. Time to first token: PP8 lowest at every load. Gap between tokens: TP8 lowest at 1 and 8, tied with TP4xPP2 at 32, PP8 highest. Throughput: TP4xPP2 highest at 8, PP8 highest at 32.">
+<p>Read by metric:</p>
+<ul>
+<li><strong>Time to first token: PP8 wins at every load.</strong> At c = 32 it is 2.87 s against 9.32 s for TP8.</li>
+<li><strong>Token gap: TP8 is shortest at c = 1 and c = 8.</strong> At c = 32, TP8 and TP4xPP2 tie (the ratio was 1.004-1.009 in all five rounds), and both are far ahead of PP8.</li>
+<li><strong>Throughput depends on load.</strong> At c = 8 the hybrid TP4xPP2 wins (65.4 tok/s), and TP8 beats PP8. At c = 32 PP8 wins (131 tok/s).</li>
+</ul>
+<p>No split wins everything. If your users wait on the first token, PP8. If they watch tokens stream at low load, TP8. If you run around eight concurrent requests and care about tokens per second, the hybrid.</p>
+<h3 id="What-vLLM’s-documentation-says-and-how-this-bears-on-it">What vLLM’s documentation says, and how this bears on it</h3>
+<p>vLLM’s parallelism guide (<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/blob/v0.30.0/docs/serving/parallelism_scaling.md?plain=1#L23"><code>parallelism_scaling.md</code>, line 23</a>) advises pipeline parallelism on cards without NVLink “for higher throughput and lower communication overhead”. On this node:</p>
+<ul>
+<li><strong>“Higher throughput” is contradicted at c = 8</strong>: TP8 delivers 53.7 tok/s against PP8’s 41.5.</li>
+<li><strong>It is supported at c = 32</strong>: PP8 delivers 131 tok/s against TP8’s 63.7.</li>
+<li><strong>What PP clearly improves is time to first token, not the gap between tokens.</strong> PP8 beats TP8 on TTFT at every load. TP8 beats PP8 on token gap at every load.</li>
+</ul>
+<p>So the sentence is not wrong; it is incomplete. Without NVLink, PP buys a faster first token at any load, and higher throughput only once the load is high enough to fill the pipeline.</p>
+<h3 id="Two-things-to-read-with-the-table">Two things to read with the table</h3>
+<p><strong>The token gap is a median.</strong> It is the median interval between consecutive output chunks of a request. A median excludes the few long intervals in which another request’s prefill runs. The mean time per output token (mean TPOT) includes those intervals, and under load it orders the arms differently:</p>
+<table>
+<thead>
+<tr>
+<th>c</th>
+<th>mean TPOT (ms)</th>
+<th>TP8</th>
+<th>TP4xPP2</th>
+<th>PP8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8</td>
+<td></td>
+<td>108</td>
+<td>94</td>
+<td>174</td>
+</tr>
+<tr>
+<td>32</td>
+<td></td>
+<td>437</td>
+<td>268</td>
+<td>223</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/tp-pp-72b-without-p2p/tpot.svg" class="" title="Median gap against mean time per token " alt="At c &#x3D; 8 and c &#x3D; 32, the median gap (grey) and the mean time per output token (red) per split. At c &#x3D; 32 the mean reverses the order: TP8 437 ms, TP4xPP2 268 ms, PP8 223 ms.">
+<p>At c = 32 the order reverses: PP8 has the lowest mean TPOT and TP8 the highest. TP8’s median gap of 69.2 ms describes a typical interval. Its mean of 437 ms describes what a stream feels like once the stalls for other requests’ prefills are counted. Every gap verdict in this post uses the median definition.</p>
+<p><strong>PP8’s TTFT at c = 8 is a range, 2.19-3.00 s.</strong> The closed loop settled into different arrival groupings in different rounds: groups of 2 and 6 in two rounds, 4 and 4 in one, and 3, 4 and 1 in the other two. PP8’s mix of scheduler steps followed the grouping. TP8 and TP4xPP2 repeated one pattern in every round. PP8’s TTFT win holds under every pattern: TP8’s TTFT was 1.76-2.41 times PP8’s.</p>
+<img src="/posts/tp-pp-72b-without-p2p/ttft-c8.svg" class="" title="TTFT at c &#x3D; 8 per round " alt="TP8 and TP4xPP2 repeat one value in all five rounds; PP8 moves between 2.19 and 3.00 seconds and stays lowest in every round.">
+<p>This comes from the load shape. Every request has exactly 128 output tokens, and the requests of a level start together. So at c = 8 and c = 32 requests finish together and the next prefills arrive together: the load runs in waves.</p>
+<h2 id="How-it-was-measured">How it was measured</h2>
+<p><strong>Arms and what was held equal.</strong> Same eight cards, same model files (Qwen2.5-72B-Instruct at a pinned commit), same build of vLLM v0.30.0, same client and the same prompt list in the same order. The KV cache was pinned to 2.25 GiB per GPU in every arm. That gives the same capacity everywhere: 58,976 KV tokens, with no preemption in any measured level. Each worker was bound to the CPUs and memory node of its GPU’s socket, with vLLM’s own NUMA binding. No arm was tuned.</p>
+<p><strong>Load.</strong> A closed loop at c = 1, 8 and 32, with 30, 80 and 160 measured requests after a warm-up. Every prompt rendered to exactly 1,536 tokens and differed from its first text token on, so the prefix cache never hit. Output was forced to exactly 128 tokens.</p>
+<p><strong>Five rounds, rotated.</strong> Each round ran all three arms, in an order rotated by one position per round. Each arm was started fresh, ran c = 1, 8 and 32, and stopped.</p>
+<p><strong>The decision rule was written before the run.</strong> For two arms, a metric and a load, each round gives a ratio. “X is better” means all five ratios favour X by more than 10% (below 0.90, or above 1.10). “No difference” means all five fall within 0.90-1.10. Anything else is unresolved. One noisy round is enough to withhold a verdict. A cell winner must beat both other arms this way. Every verdict above passed this rule in all five rounds.</p>
+<p><strong>Gates.</strong> A cell counted only if every gate held in that round:</p>
+<ul>
+<li><strong>Equal KV capacity</strong>: 58,976 tokens in every arm, and the preemption counter did not move.</li>
+<li><strong>Quiet host</strong>: no foreign process on any card, and foreign CPU time at most 2% of each socket. The first attempt at round 1 failed this gate: someone else’s job used 17-28% of a socket. That attempt was rerun. In the accepted rounds foreign CPU stayed at or below 0.44%.</li>
+<li><strong>Placement</strong>: every worker’s CPU list and memory node matched what was declared.</li>
+<li><strong>Transport</strong>: every NCCL channel went through host shared memory, none through P2P or the network.</li>
+<li><strong>Clean requests</strong>: 1,536 tokens in and 128 out for every request, every request arriving as 128 separate chunks, and no prefix-cache hits.</li>
+</ul>
+<p>All 45 accepted cells (3 arms x 3 loads x 5 rounds) passed every gate.</p>
+<h3 id="The-output-check-and-why-it-first-lied">The output check, and why it first lied</h3>
+<p>vLLM issue <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/issues/40725">#40725</a> reports TP4 output corruption on PCIe consumer cards in an older release, so I checked that the three splits produce the same text. Before timing, each arm answered 35 prompts (the 30 c = 1 prompts and 5 non-English ones), one at a time, with temperature 0 and the top-5 logprobs at every position. For each pair of arms, I found the first position where they chose different tokens. A difference was benign if each arm’s token sat in the other’s top 5 and the two arms’ choices were less than 1.0 nat apart in logprob. Anything else was called corruption.</p>
+<p>The first run of this check excluded all three arms for corruption. That turned out to be an artefact of the check itself. The requests left <code>repetition_penalty</code> unset, so the model’s own default of 1.05 applied. vLLM’s sampler takes its argmax over the penalised logits, but the logprobs it returns are raw. The check assumed the emitted token was the argmax of the logprobs it read, and under the penalty that was false: each arm emitted 204-215 of its 4,480 tokens below its own top raw logprob. All 25 “corruption” cases were tokens that one arm rejected because they had already appeared in the prompt or the output.</p>
+<p>The fix was one field: <code>repetition_penalty: 1.0</code> on the check’s requests only, so the emitted token is the argmax of the logprobs returned. I also added a premise test that verifies this, position by position, before the check is read. On the rerun the premise held at every one of 3 x 4,480 positions. Per pair of arms, 15-21 of the 35 prompts were identical, and every other difference was benign, with first-difference margins of at most 0.25 nat. No arm was excluded. The timed runs kept the model’s default sampling settings, identical in all arms.</p>
+<p>The lesson: an equality check is only as good as its assumption about what the sampler did. Test that assumption first, and treat the comparison as unreadable if it fails. A gate that fires on its own instrument looks exactly like a gate that caught a real bug.</p>
+<h2 id="Where-the-time-goes-at-c-1">Where the time goes at c = 1</h2>
+<p>To explain the c = 1 results, I traced one 1,536-token prefill and 20 decode steps per arm with Nsight Systems. The traced windows reproduce the timed numbers. Decode steps took 27.9 / 44.7 / 152.5 ms (TP8 / TP4xPP2 / PP8), against token gaps of 27.7 / 44.5 / 152.3 ms. Prefill windows took 1.75 / 1.74-1.77 / 1.34-1.42 s, against TTFTs of 1.78 / 1.80 / 1.44 s.</p>
+<p>TP8 is read as time in NCCL kernels. In the pipeline arms, a stage posts its next receive as soon as its own work ends, and that NCCL kernel spins until the upstream stage sends. NCCL time there is mostly waiting, not communication. So each pipeline GPU’s window is split into compute, hop transfer, collective time after the last rank arrived, waiting and idle.</p>
+<table>
+<thead>
+<tr>
+<th>per GPU, c = 1</th>
+<th>TP8</th>
+<th>TP4xPP2 (per stage)</th>
+<th>PP8 (per stage)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>prefill compute</td>
+<td>188 ms</td>
+<td>178-184 ms</td>
+<td>170-179 ms</td>
+</tr>
+<tr>
+<td>prefill collectives (after last arrival)</td>
+<td>1,556 ms all-reduce (161 x 25.2 MB, median 9.67 ms, about 4.6 GB/s bus bandwidth)</td>
+<td>686-704 ms all-reduce inside the stage</td>
+<td>none</td>
+</tr>
+<tr>
+<td>prefill hop between stages</td>
+<td>none</td>
+<td>1.9-2.1 ms; 5.9-6.1 GB/s per GPU pair (12.6 MB, four pairs in parallel)</td>
+<td>3.5-8.1 ms per GPU; 11.9-14.8 GB/s per hop (50.3 MB)</td>
+</tr>
+<tr>
+<td>decode compute per step</td>
+<td>22.4 ms</td>
+<td>20.1 (stage 0) / 20.9 (stage 1) ms</td>
+<td>18.7 ms (last stage 21.4)</td>
+</tr>
+<tr>
+<td>decode collectives per step</td>
+<td>5.2 ms</td>
+<td>1.6-1.7 ms</td>
+<td>none</td>
+</tr>
+<tr>
+<td>decode hop latency</td>
+<td>none</td>
+<td>9.4-10.0 µs</td>
+<td>14-18 µs</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/tp-pp-72b-without-p2p/timesplit.svg" class="" title="Where the time goes at c &#x3D; 1 " alt="Stacked bars per split for one prefill and one decode step: TP8 spends most of its prefill in all-reduce; the pipeline splits spend most of their time waiting for the upstream stage.">
+<ul>
+<li><strong>Why PP8 has the lower TTFT.</strong> PP8’s prefill is eight stages of about 175 ms, run one after another, plus seven hops of about 2 ms. TP8 computes for only 188 ms but spends 1.56 s in all-reduce. That all-reduce time matches a separate measurement on this node: an 8-rank all-reduce of 24 MiB ran at 4.45 GB/s, which predicts 1.59 s for this prefill. TP4xPP2 sits between: each stage computes for about 180 ms and spends about 0.70 s in 4-rank all-reduce.</li>
+<li><strong>Why TP8 has the shortest token gap at c = 1.</strong> In TP8, each GPU reads its share of the weights once per token: 22.4 ms of compute plus 5.2 ms of all-reduce. In TP4xPP2 that happens twice in series (2 x about 20.5 ms + 2 x 1.6 ms), and in PP8 eight times in series (8 x 18.7 ms). The hops cost microseconds.</li>
+<li><strong>Waiting.</strong> In the pipeline arms most of each GPU’s window is spent waiting for its upstream stage. In PP8 decode that is 2.67 s of each GPU’s 3.05 s. At c = 1 this is the pipeline’s serial structure, not communication cost.</li>
+</ul>
+<p>TP8’s prefill is the only place where communication dominates: NCCL kernels take 89% of its prefill-step GPU time. Its all-reduce reaches about 4.6 GB/s of bus bandwidth. That figure is not directly comparable with the roughly 25 GB/s one socket moves from host to GPU in a plain copy (<a href="/posts/host-gpu-bandwidth-without-p2p/">the first post</a>): a host-staged ring all-reduce makes several copies per byte and crosses the socket boundary. The trace does not show how the time splits among those steps. A host-staged all-reduce for more than two cards is therefore a candidate for a separate project.</p>
+<p>The trace covers c = 1 only. It does not explain TP4xPP2’s throughput win at c = 8, or the TP8 / TP4xPP2 tie on token gap at c = 32. Those two results are unexplained.</p>
+<h2 id="What-I-expected-and-what-came-out">What I expected, and what came out</h2>
+<p>Before the run I wrote down an expectation that could be wrong. I expected PP8 to win throughput at both c = 8 and c = 32, and the hybrid to land between the pure splits on every metric. The TTFT and token-gap predictions held. The throughput prediction failed at c = 8, where TP8 beat PP8. The hybrid prediction failed too: TP4xPP2 is the outright throughput winner at c = 8. Both surprises went to a separate review before this was written. It recomputed every value and verdict from the per-request records and found them equal to mine.</p>
+<h2 id="Scope">Scope</h2>
+<p>Every number here holds for 1,536 prompt tokens to 128 output tokens with fixed output length, bf16 weights, and this node: eight RTX 4090s on PCIe 4.0 without peer-to-peer on the stock driver, across two CPU sockets, running vLLM v0.30.0 with default settings apart from the pinned KV pool and the NUMA binding.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The benchmark is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/tp-pp-72b-bench">rockyshi-dev/tp-pp-72b-bench</a>. The harness starts each arm, runs the closed-loop client, checks every gate from the raw records, and computes the five-round verdicts from per-request timestamps. Its README has the exact commands. A second, independent run of that repository on the same machine reproduced Table A and Table B and every verdict above.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/vllm-kv-handoff-without-p2p/" rel="prev" title="KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB&#x2F;s">
+                  <i class="fa fa-angle-left"></i> KV-cache handoff in vLLM without GPU peer-to-peer: 0.4 to 0.8 GB/s
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
