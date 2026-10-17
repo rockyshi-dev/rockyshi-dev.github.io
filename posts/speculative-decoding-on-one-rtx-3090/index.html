@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="Speculative decoding makes 8B models 1.8-3x faster on a single RTX 3090, and the best public drafters already run within 6-24% of a floor set by the bytes each round must read at the bandwidth plain d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How far is speculative decoding from its weight-read floor on one RTX 3090?">
+<meta property="og:url" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="Speculative decoding makes 8B models 1.8-3x faster on a single RTX 3090, and the best public drafters already run within 6-24% of a floor set by the bytes each round must read at the bandwidth plain d">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f01_prefill_decode.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f02_roofline.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f03_decode_step.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f04_bytes_per_token.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f05_cuda_graphs.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f06_spec_round.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f07_verify_vs_n.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f08_acceptance.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f09_acceptance.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f10_tree.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f12_drafters.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f11_tree_sweep.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/fig1_round_split.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f14_batch.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f15_long_prompt.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/fig2_small_drafter.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f16_lossless.svg">
+<meta property="article:published_time" content="2026-10-17T23:16:00.000Z">
+<meta property="article:modified_time" content="2026-10-17T23:16:00.905Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="measurement">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f01_prefill_decode.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/","path":"posts/speculative-decoding-on-one-rtx-3090/","title":"How far is speculative decoding from its weight-read floor on one RTX 3090?"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>How far is speculative decoding from its weight-read floor on one RTX 3090? | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Part-I-why-generating-text-is-slow"><span class="nav-number">1.</span> <span class="nav-text">Part I: why generating text is slow</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Tokens-one-at-a-time"><span class="nav-number">1.1.</span> <span class="nav-text">Tokens, one at a time</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#What-one-decode-pass-costs-reading-the-weights"><span class="nav-number">1.2.</span> <span class="nav-text">What one decode pass costs: reading the weights</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Number-formats-change-the-bytes"><span class="nav-number">1.3.</span> <span class="nav-text">Number formats change the bytes</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Costs-that-are-not-bytes-launches-and-idle-time"><span class="nav-number">1.4.</span> <span class="nav-text">Costs that are not bytes: launches and idle time</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Part-II-speculative-decoding-one-idea-at-a-time"><span class="nav-number">2.</span> <span class="nav-text">Part II: speculative decoding, one idea at a time</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Guess-several-tokens-check-them-in-one-pass"><span class="nav-number">2.1.</span> <span class="nav-text">Guess several tokens, check them in one pass</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Which-guesses-are-kept"><span class="nav-number">2.2.</span> <span class="nav-text">Which guesses are kept</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Trees-instead-of-a-single-guess"><span class="nav-number">2.3.</span> <span class="nav-text">Trees instead of a single guess</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Four-families-of-drafters"><span class="nav-number">2.4.</span> <span class="nav-text">Four families of drafters</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#One-formula-for-speed"><span class="nav-number">2.5.</span> <span class="nav-text">One formula for speed</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Part-III-what-I-measured-on-one-RTX-3090"><span class="nav-number">3.</span> <span class="nav-text">Part III: what I measured on one RTX 3090</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Compared-against-what-Tuning-is-half-the-story"><span class="nav-number">3.1.</span> <span class="nav-text">Compared against what? Tuning is half the story</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Where-one-round-goes-and-the-weight-read-floor"><span class="nav-number">3.2.</span> <span class="nav-text">Where one round goes, and the weight-read floor</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-bit-targets-shift-the-balance"><span class="nav-number">3.3.</span> <span class="nav-text">4-bit targets shift the balance</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#More-requests-at-once-batch-size"><span class="nav-number">3.4.</span> <span class="nav-text">More requests at once: batch size</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Long-prompts-against-long-outputs"><span class="nav-number">3.5.</span> <span class="nav-text">Long prompts against long outputs</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#The-small-draft-model-revisited"><span class="nav-number">3.6.</span> <span class="nav-text">The small draft model, revisited</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Is-the-output-really-unchanged"><span class="nav-number">3.7.</span> <span class="nav-text">Is the output really unchanged?</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-to-take-away"><span class="nav-number">4.</span> <span class="nav-text">What to take away</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scope"><span class="nav-number">5.</span> <span class="nav-text">Scope</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">4</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="How far is speculative decoding from its weight-read floor on one RTX 3090? | Rocky Shi">
+      <meta itemprop="description" content="Speculative decoding makes 8B models 1.8-3x faster on a single RTX 3090, and the best public drafters already run within 6-24% of a floor set by the bytes each round must read at the bandwidth plain decoding achieves. Built up from first principles: why decoding is memory-bound, how guess-and-check works, how to compute that floor, and what tuning, 4-bit weights, batch size, long prompts and long reasoning traces do to it.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          How far is speculative decoding from its weight-read floor on one RTX 3090?
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-17 16:16:00" itemprop="dateCreated datePublished" datetime="2026-10-17T16:16:00-07:00">2026-10-17</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">Speculative decoding makes 8B models 1.8-3x faster on a single RTX 3090, and the best public drafters already run within 6-24% of a floor set by the bytes each round must read at the bandwidth plain decoding achieves. Built up from first principles: why decoding is memory-bound, how guess-and-check works, how to compute that floor, and what tuning, 4-bit weights, batch size, long prompts and long reasoning traces do to it.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>Generating text with a large language model on one GPU is slow for a simple reason: every new token requires reading the
+whole model from memory once. Speculative decoding gets around this by guessing several tokens cheaply and checking them
+all in a single pass of the big model. On my RTX 3090 it makes Llama-3.1-8B about three times faster without changing
+which tokens the model would choose.</p>
+<p>I spent a few weeks looking for a way to make it faster still, on this one card. I did not find one. What I found
+instead is a way to see why. For every setup I measured, I can compute a floor for one round: the bytes the GPU must
+read, divided by the bandwidth a plain decoding step actually achieves on the same card. The best public methods are
+already close to that floor:</p>
+<ul>
+<li>Llama-3.1-8B in bf16 with a tuned EAGLE-3 drafter: 31.9 ms per round against a floor of 26.6 ms.</li>
+<li>Qwen3-8B with the DFlash drafter, in bf16 or 4-bit: within 6-8% of the floor.</li>
+<li>The largest gap I found is 24%, on a 4-bit Llama.</li>
+</ul>
+<p>These are profiled GPU times per round. Counting the per-request overheads a timed run also pays (prefill, host-side
+scheduling), the gaps are 9-28%.</p>
+<p>This post builds that argument from the ground up. Part I explains why plain decoding is limited by memory traffic.
+Part II builds speculative decoding on top of that, one idea at a time. Part III is what I measured. If you already know
+how EAGLE works, skip to Part III.</p>
+<span id="more"></span>
+<h2 id="Part-I-why-generating-text-is-slow">Part I: why generating text is slow</h2>
+<h3 id="Tokens-one-at-a-time">Tokens, one at a time</h3>
+<p>A language model writes text one token (a word or a piece of a word) at a time, and each new token is computed from all
+the tokens before it. A request runs in two phases:</p>
+<ul>
+<li><strong>Prefill.</strong> The model reads the whole prompt in one pass.</li>
+<li><strong>Decode.</strong> The model then produces the answer one token per pass.</li>
+</ul>
+<p>Each layer keeps a key and a value vector for every token it has seen, so that it does not recompute them on the next
+pass. This store is the <strong>KV cache</strong>. It grows by a fixed number of bytes for every token: about 147 KB per token for
+Qwen3-8B in bf16.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f01_prefill_decode.svg" class="" title="Prefill and decode " alt="Left: the three prompt tokens go through the model in one pass and fill the KV cache with three entries. Right: each decode pass takes the newest token, reads the KV cache, produces one token and adds one entry.">
+<p>A 512-token answer is therefore one prefill pass followed by 511 decode passes. Decode passes are where the time goes.</p>
+<h3 id="What-one-decode-pass-costs-reading-the-weights">What one decode pass costs: reading the weights</h3>
+<p>In a decode pass, one token’s vector is multiplied by every weight matrix of the model. So the GPU has to read every
+weight from its memory once, to produce a single token. The one exception is the input embedding table, from which it
+reads only one row.</p>
+<p>A GPU kernel can be limited by two things: how fast the GPU computes (FLOP/s) and how fast it reads memory (bytes/s).
+Which limit applies depends on the <strong>arithmetic intensity</strong>: the number of operations done per byte read. In a decode
+step each bf16 weight (2 bytes) is used for one multiply and one add, so the step does about 1 operation per byte. An
+RTX 3090 reads up to 936 GB/s and computes about 71 dense bf16 TFLOP/s (spec-sheet figures), so it only becomes
+compute-bound at about 76 operations per byte. A decode step is nowhere near that: it is <strong>memory-bound</strong>.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f02_roofline.svg" class="" title="Roofline of the RTX 3090 " alt="Attainable throughput against operations per byte, on log axes. A decode step of one token sits at about 1 operation per byte, deep in the memory-bound region; checking 32 tokens at once sits at about 32. The compute limit starts at about 76 operations per byte.">
+<p>You can check this on a real card. Llama-3.1-8B in bf16 reads 15.0 GB of weights per token: the 16.06 GB checkpoint minus
+the 1.05 GB embedding table. My 3090 decodes it at 50.9 tokens per second, which is 19.6 ms per token. 15.0 GB in 19.6 ms
+is 765 GB/s, which is 82% of the card’s peak bandwidth.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f03_decode_step.svg" class="" title="One decode step " alt="GPU memory holds 15.0 GB of weights and the KV cache. All 15.0 GB stream into the compute units to turn token t into token t plus 1; at 765 GB&#x2F;s that takes 19.6 ms. About 2 operations per weight for 2 bytes read is 1 operation per byte.">
+<p>So at batch size 1, a good first estimate of decoding speed is bandwidth divided by the bytes read per token.</p>
+<h3 id="Number-formats-change-the-bytes">Number formats change the bytes</h3>
+<p>A bf16 weight takes 2 bytes. An fp8 weight takes 1 byte, and an int4 weight half a byte (plus a small scale per group of
+weights). <em>Weight-only quantisation</em> stores the weights in the small format and expands them to bf16 inside the kernel,
+so the arithmetic still happens in bf16. The RTX 3090 has no native fp8 arithmetic, but it can still read fp8 weights
+compactly this way: SGLang uses its “Marlin” kernels for that.</p>
+<p>The 4-bit (AWQ) version of Llama-3.1-8B reads 4.68 GB per token: 3.63 GB of int4 weights for the transformer layers plus
+the 1.05 GB output layer, which stays in bf16. Plain decoding goes from 50.9 to 143.4 tokens per second. Note that 4-bit
+weights also raise the arithmetic intensity: each byte now feeds four operations instead of one, which moves 4-bit
+models closer to the compute limit.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f04_bytes_per_token.svg" class="" title="Bytes and speed " alt="Left: weights read per token, 15.0 GB in bf16 and 4.7 GB in 4-bit. Right: plain decoding speed, 51 tokens per second in bf16 and 143 in 4-bit.">
+<h3 id="Costs-that-are-not-bytes-launches-and-idle-time">Costs that are not bytes: launches and idle time</h3>
+<p>The GPU executes a pass as a sequence of kernels, and the CPU has to launch each one. When kernels are short, the GPU
+sits idle while it waits for the next launch. <strong>CUDA graphs</strong> remove most of this: the whole sequence is recorded once
+and then replayed with a single launch. Every number in this post was measured with CUDA graphs on. Even so, 0.3-1.5 ms
+of each speculative round below is idle GPU time.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f05_cuda_graphs.svg" class="" title="CUDA graphs " alt="Top: kernels launched one by one, with gaps between them while the GPU waits. Bottom: the same kernels replayed from a CUDA graph with one launch and no gaps.">
+<h2 id="Part-II-speculative-decoding-one-idea-at-a-time">Part II: speculative decoding, one idea at a time</h2>
+<h3 id="Guess-several-tokens-check-them-in-one-pass">Guess several tokens, check them in one pass</h3>
+<p>A cheap <strong>drafter</strong> proposes the next few tokens. The big <strong>target</strong> model then processes all of them in a single
+pass, exactly as it processes a prompt. One draft-then-check cycle is a <strong>round</strong>:</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f06_spec_round.svg" class="" title="One speculative round " alt="A time axis for one round of Llama-3.1-8B bf16 with EAGLE-3: six short draft steps take 7.8 ms, a draft extend step 1.4 ms, then one verify pass of the target over 32 candidate tokens takes 22.0 ms. With 0.7 ms of idle time the round takes 31.9 ms and produces 5.0 tokens on average.">
+<p>For a bf16 model, checking several tokens costs about the same as producing one, because the weights are still read
+only once and only the arithmetic grows. For a 4-bit model the extra arithmetic shows up sooner, since each byte already
+feeds four times as many operations. I measured both:</p>
+<ul>
+<li><strong>Llama-3.1-8B in bf16:</strong> one plain decode step takes 19.6 ms. Checking 32 tokens takes 22.0 ms (1.1x).</li>
+<li><strong>Qwen3-8B in 4-bit:</strong> checking 1, 8, 16 and 32 tokens takes 7.4, 8.0, 8.4 and 11.9 ms (1.6x at 32).</li>
+</ul>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f07_verify_vs_n.svg" class="" title="Verify time against tokens checked " alt="Left: Qwen3-8B 4-bit, the time of one pass for 1, 8, 16 and 32 tokens rises from 7.4 to 11.9 ms. Right: Llama-3.1-8B bf16, the time of a whole speculative round against the number of tokens checked; it jumps between 32 and 40.">
+<p>The right panel shows a cost the bandwidth argument does not predict. Going from 32 to 40 checked tokens makes the whole
+round 4.6 ms slower. My guess is that the matrix-multiply kernels switch tile shape at that size, but I did not profile
+it, so the cause is unexplained here. It matters for tuning, below.</p>
+<h3 id="Which-guesses-are-kept">Which guesses are kept</h3>
+<p>At temperature 0 (greedy decoding), the target checks the drafted tokens in order. A drafted token is kept only if it
+equals the target’s own top choice at that position. At the first mismatch the target’s own token is used instead, and
+the rest of the draft is thrown away. Every token in the output is therefore the target’s own top choice at its
+position. (Whether the <em>text</em> comes out byte-for-byte identical to plain decoding is a separate question, answered at
+the end of Part III.)</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f08_acceptance.svg" class="" title="Greedy acceptance " alt="Drafted tokens sat, on, the, sofa, and. The target chooses sat, on, the, mat. The first three match and are kept; at the fourth the target says mat instead of sofa, so mat is used and the rest is not checked. The round produces four tokens.">
+<p>The number of tokens one round produces is called <strong>tau (τ)</strong>: the drafts that were kept, plus the one token the target
+always contributes. In the example above, τ = 4.</p>
+<p>τ can be computed from per-step acceptance. Let c₁ be the chance that the first drafted token is kept, c₂ the chance that
+the second is kept given that the first was, and so on. The k-th draft survives only if all k checks pass, so</p>
+<p>τ = 1 + c₁ + c₁c₂ + c₁c₂c₃ + …</p>
+<p>For the EAGLE-3 drafter on Llama-3.1-8B I measured c = 0.92, 0.90, 0.84, 0.82, 0.77, 0.76, 0.74 over seven draft
+positions (with the reference EAGLE implementation, on the same tree shape). The formula gives τ = 5.04; SGLang’s
+direct measurement is 5.02.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f09_acceptance.svg" class="" title="From acceptance to tau " alt="Grey bars: the chance that the k-th drafted token is kept given the earlier ones were, from 0.92 down to 0.74. Red bars: the chance that all of the first k are kept, from 0.92 down to 0.25. Tau is 1 plus the sum of the red bars, 5.04.">
+<p>With sampling (temperature above 0), exact rules exist that keep the output <em>distribution</em> identical to the target’s.
+The textbook rule accepts a drafted token with probability min(1, p_target / p_draft) and otherwise draws a replacement
+from the leftover probability mass. SGLang’s EAGLE verifier uses a target-only variant that does not use the draft’s
+probabilities: it accepts a drafted token with the target’s own probability for it. Either way, sampling accepts fewer
+tokens than greedy decoding: on the same setup, τ is 4.33 at temperature 1 against 5.35 at temperature 0 (EAGLE-3 with
+its default tree).</p>
+<h3 id="Trees-instead-of-a-single-guess">Trees instead of a single guess</h3>
+<p>Instead of one guess per position, the drafter can propose its top few candidates at each step, several steps deep, and
+let the target check the most promising N of them in one pass. A mask lets each candidate attend only to its own
+ancestors, so every path through the tree is scored at once. There are three knobs:</p>
+<ul>
+<li><strong>depth:</strong> how many steps the drafter runs;</li>
+<li><strong>top-k:</strong> how many candidates it keeps per step;</li>
+<li><strong>N:</strong> how many candidate tokens the target checks.</li>
+</ul>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f10_tree.svg" class="" title="A draft tree and its mask " alt="Left: a tree rooted at It, with is and was as the top two second tokens and two candidates under each. Right: a 7 by 7 attention mask in which each candidate may see only itself and its ancestors.">
+<h3 id="Four-families-of-drafters">Four families of drafters</h3>
+<table>
+<thead>
+<tr>
+<th>family</th>
+<th>example</th>
+<th>what it reads per round</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>small model of the same family</td>
+<td>Qwen3-0.6B drafting for Qwen3-8B</td>
+<td>the whole small model, once per draft step</td>
+</tr>
+<tr>
+<td>draft head</td>
+<td>EAGLE-3: one transformer layer that reads the target’s own hidden states</td>
+<td>about 0.75 GB per draft step in bf16</td>
+</tr>
+<tr>
+<td>block drafter</td>
+<td>DFlash: guesses a whole block of tokens in one pass</td>
+<td>its own 2.1 GB plus the target’s 1.24 GB output layer, once per round</td>
+</tr>
+<tr>
+<td>copying</td>
+<td>n-gram lookup in the prompt and output so far</td>
+<td>no weights at all</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f12_drafters.svg" class="" title="Four drafter families " alt="Small model: a full small model, read once per draft step. Draft head: one layer that also reads the target hidden states, once per draft step. Block drafter: one pass per round over its own weights and the target output layer. Copying: a lookup with no model weights.">
+<h3 id="One-formula-for-speed">One formula for speed</h3>
+<p>Putting the pieces together:</p>
+<p>tokens per second = τ ÷ (time per round)</p>
+<p>The time per round is verify + drafting + idle on the GPU, plus a share of each request’s prefill and host-side work.
+For example, EAGLE-3 on Llama-3.1-8B in bf16 has τ = 5.02 and a timed round of 33.1 ms (31.9 ms of it is the GPU round
+in the timeline above), which gives 151.5 tokens per second. That is 2.98 times plain decoding (50.9 tokens per second).
+A new method can help in only two ways: raise τ, or shorten the round.</p>
+<h2 id="Part-III-what-I-measured-on-one-RTX-3090">Part III: what I measured on one RTX 3090</h2>
+<p>All measurements use SGLang 0.5.20 with CUDA graphs, one request at a time, unless I say otherwise.</p>
+<h3 id="Compared-against-what-Tuning-is-half-the-story">Compared against what? Tuning is half the story</h3>
+<p>The tree has to be tuned for the card. I swept N with EAGLE-3 at depth 7 on Llama-3.1-8B: τ rises steadily with N, but
+speed peaks at N = 32. Above 32 the round pays for the step in cost described above.</p>
+<table>
+<thead>
+<tr>
+<th>N</th>
+<th>8</th>
+<th>16</th>
+<th>24</th>
+<th><strong>32</strong></th>
+<th>40</th>
+<th>48</th>
+<th>60 (default)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>τ</td>
+<td>3.95</td>
+<td>4.58</td>
+<td>4.92</td>
+<td><strong>5.02</strong></td>
+<td>5.17</td>
+<td>5.22</td>
+<td>5.35</td>
+</tr>
+<tr>
+<td>ms per round</td>
+<td>31.1</td>
+<td>32.6</td>
+<td>34.0</td>
+<td><strong>33.1</strong></td>
+<td>37.8</td>
+<td>38.2</td>
+<td>37.6</td>
+</tr>
+<tr>
+<td>tokens/s</td>
+<td>127.1</td>
+<td>140.6</td>
+<td>144.8</td>
+<td><strong>151.5</strong></td>
+<td>136.9</td>
+<td>136.8</td>
+<td>142.3</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f11_tree_sweep.svg" class="" title="Tree sweep " alt="Left: tau rises from 3.95 to 5.35 as N goes from 8 to 60. Right: speed peaks at N equal to 32 with 152 tokens per second; the default N of 60 gives 142.">
+<p>EAGLE-3’s default tree gives 142.3 tokens per second on this card, and the tuned tree gives 151.5: 6.5% more, from a
+configuration change alone. That is about the size of many published improvements, so it matters what a paper compares
+against.</p>
+<p>The same effect works in the other direction. DFlash is reported to be faster than EAGLE-3. On this card, against the
+<em>tuned</em> EAGLE-3, it ran at 142.8 tokens per second against 151.4: a ratio of 0.94, with a 95% confidence interval of
+0.89-1.02.</p>
+<h3 id="Where-one-round-goes-and-the-weight-read-floor">Where one round goes, and the weight-read floor</h3>
+<p>A round has to read the target’s weights once, plus whatever the drafter reads. Dividing those bytes by the bandwidth a
+plain decode step achieves on the same card gives the <strong>weight-read floor</strong> of the round. It is a floor for any method
+that reads these bytes at the bandwidth a plain decode step reaches. A method could only go below it by reading fewer
+bytes, or by reading them faster than a plain decode step does, for instance by running two kernels at once. I did not
+manage to measure how much the second option gives on this card, so I leave it open.</p>
+<p>I profiled the round of the best method in five setups and split it into verify, drafting and idle GPU time. Here
+“drafting” counts only the time GPU kernels were running, so the first bar shows slightly less drafting (8.5 ms) than
+the timeline above (9.1 ms) and slightly more idle time.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/fig1_round_split.svg" class="" title="Round split against the floor " alt="Five stacked bars: verify, drafting and idle time per round, each with a black mark at its weight-read floor. Llama bf16 EAGLE-3 31.9 ms against 26.6; Llama 4-bit EAGLE-3 with an fp8 head 13.5 against 10.9; Qwen3 4-bit DFlash 13.2 against 12.4; Qwen3 bf16 short prompts DFlash 25.2 against 23.3; Qwen3 bf16 thinking DFlash 27.0 against 25.2.">
+<table>
+<thead>
+<tr>
+<th>setup</th>
+<th>best method</th>
+<th>GPU round (ms)</th>
+<th>timed round (ms)</th>
+<th>floor (ms)</th>
+<th>gap (GPU / timed)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Llama-3.1-8B bf16</td>
+<td>EAGLE-3, tuned tree</td>
+<td>31.9</td>
+<td>33.1</td>
+<td>26.6</td>
+<td>20% / 25%</td>
+</tr>
+<tr>
+<td>Llama-3.1-8B 4-bit</td>
+<td>EAGLE-3, fp8 head</td>
+<td>13.5</td>
+<td>14.0</td>
+<td>10.9</td>
+<td>24% / 28%</td>
+</tr>
+<tr>
+<td>Qwen3-8B 4-bit</td>
+<td>DFlash</td>
+<td>13.2</td>
+<td>13.7</td>
+<td>12.4</td>
+<td>6% / 10%</td>
+</tr>
+<tr>
+<td>Qwen3-8B bf16, short prompts</td>
+<td>DFlash, fp8 drafter</td>
+<td>25.2</td>
+<td>26.2</td>
+<td>23.3</td>
+<td>8% / 12%</td>
+</tr>
+<tr>
+<td>Qwen3-8B bf16, thinking traces</td>
+<td>DFlash</td>
+<td>27.0</td>
+<td>27.5</td>
+<td>25.2</td>
+<td>7% / 9%</td>
+</tr>
+</tbody>
+</table>
+<p>To check the floor arithmetic yourself, take the first row. The target reads 15.0 GB per round. The drafter reads
+5.3 GB: seven passes of the head’s 0.75 GB, plus a 0.1 GB projection. At 765 GB/s that is 26.6 ms. A trick that only
+reschedules work therefore wins at most 31.9 / 26.6 = 1.20x here, unless it reads memory faster than a plain decode
+step.</p>
+<p>The DFlash rows are the tightest: a single drafter pass per round leaves little that is not weight traffic.</p>
+<h3 id="4-bit-targets-shift-the-balance">4-bit targets shift the balance</h3>
+<p>With a 4-bit target, verifying drops to about 8 ms but drafting does not shrink. Drafting becomes 33-40% of the round,
+and the best tree gets smaller: depth 5 with N = 16, instead of depth 7 with N = 32. Storing the draft head’s linear
+layers in fp8 helps for the same reason: it took Llama-3.1-8B (4-bit) from 269.3 to 303.0 tokens per second at the same τ
+(4.22 and 4.23).</p>
+<p>The speedup over plain decoding also falls, from 2.98x in bf16 to 2.11x in 4-bit (and 1.76x for Qwen3-8B in 4-bit with
+the best drafter that passed my correctness check). That is not because speculation got worse: plain decoding itself
+got 2.8 times faster.</p>
+<h3 id="More-requests-at-once-batch-size">More requests at once: batch size</h3>
+<p>When several requests share a pass, the verify step does more arithmetic per byte and stops being free sooner. With the
+best static tree for each batch size, the speedup over plain decoding falls:</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f14_batch.svg" class="" title="Speedup against batch size " alt="Speedup over plain decoding with the best static tree: 2.98x at batch 1, 2.70x at 2, 2.36x at 4, 1.94x at 8; the best tree shrinks from depth 7 with N 32 to depth 3 with N 8.">
+<h3 id="Long-prompts-against-long-outputs">Long prompts against long outputs</h3>
+<p>Each token’s position is encoded as a set of rotation angles (RoPE). The public EAGLE-3 head for Llama-3.1-8B was trained
+on sequences of up to 2,048 positions. I gave it prompts of 8k and 16k tokens (passages of Wikipedia text to summarise).
+There it meets relative distances it never saw in training, and τ collapses to about 1.3. In SGLang, EAGLE-3 then runs
+slower than plain decoding.</p>
+<p>A simple fix is to let the head see only the last 1,024 tokens plus the first 4 (so-called sink tokens). That brings τ
+back to about 3.0. I measured this with the reference EAGLE implementation, scoring the head against the target’s own
+continuations, because SGLang’s window option does not reach the draft steps. This fix is already published, and a head
+fine-tuned for long contexts is public too, so I did not pursue it further.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f15_long_prompt.svg" class="" title="Long prompts " alt="Tau against prompt length for the draft head. Seeing the whole prompt, tau falls from 3.8 at 2k tokens to 1.3 at 8k and 16k. With a window of the last 1,024 tokens plus 4 sink tokens it stays near 3.0.">
+<p>Long <em>outputs</em> behave differently. I ran Qwen3-8B in thinking mode at its recommended sampling settings (temperature
+0.6, top-p 0.95, top-k 20) on MATH-500, AIME 2024 and HumanEval problems, with traces up to 8,192 tokens. On the
+MATH-500 traces that ran past 4,000 tokens, DFlash’s τ in the first 2,000 output tokens is 1.06 times its τ after that,
+with a 95% interval of 1.00-1.13. That is no collapse. “Long context” is two different problems, and only the
+long-prompt one hurt the drafters I tested.</p>
+<h3 id="The-small-draft-model-revisited">The small draft model, revisited</h3>
+<p>A recent benchmark (<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2509.04474">arXiv 2509.04474</a>, Table 3) ran Qwen3-0.6B as the drafter for
+Qwen3-8B in thinking mode at temperature 0.6 on an RTX A6000. It had the highest τ of all drafters (6.34) but ran at
+0.88x the speed of plain decoding.</p>
+<p>On the 3090 in SGLang, the same pairing already runs at 2.3x plain decoding with its default settings (113 tokens per
+second). I do not know why the benchmark measured it so much slower; it used a different card and serving setup. Storing
+the small model’s weights in fp8 and cutting the candidates per step from 10 to 4 takes it to 130 tokens per second,
+2.7x plain decoding.</p>
+<p>Against DFlash, though, it still loses. Given the same fp8 treatment, DFlash runs at 144 tokens per second, and the small
+model reaches 0.90 of that. I also projected what would happen if its drafting ran right at its weight-read floor: even
+then it would be only 1.13 times DFlash. Verifying takes 21.9 ms of every round. On top of that, the round grows by
+about 3.8 ms on an average-length trace as the context grows, mostly because the small model has to read its own
+growing KV cache at every draft step.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/fig2_small_drafter.svg" class="" title="Small draft model against DFlash " alt="DFlash 138 tokens per second with a bf16 drafter and 144 with fp8. Qwen3-0.6B as drafter: 113 in bf16, 116 in fp8, 130 in fp8 with 4 candidates per step. Hatched projections: 153 with drafting at 70 percent of its floor and 164 at the floor, 1.06x and 1.13x DFlash.">
+<h3 id="Is-the-output-really-unchanged">Is the output really unchanged?</h3>
+<p>Speculative decoding at temperature 0 only ever emits the target’s top choice, so in exact arithmetic the text is the
+same as plain decoding. In practice it is not byte-for-byte the same, even in bf16. Checking 32 tokens in one pass
+computes the target’s numbers with slightly different rounding than producing them one at a time. When two candidate
+tokens are almost tied, that rounding can flip which one is on top, and from there the two texts diverge. On Qwen3-8B
+in bf16, plain decoding run twice gives identical text on 60 of 60 prompts, but the speculative methods match it on
+only 16-22 of 60. On the 4-bit models even plain decoding does not repeat itself: two runs agree on only 15 of 60
+prompts (Qwen3-8B) and 27 of 60 (Llama-3.1-8B). I do not know which kernel causes that.</p>
+<p>So comparing texts cannot tell an exact method from a slightly wrong one. I checked each emitted token instead. The
+target model alone scores the text, and for every token I measure how far its log-probability is below the target’s top
+choice at that position. More than 99% of tokens have a gap of exactly zero for every method. The rest are near-ties:
+when I score two plain decoding runs the same way, their nonzero gaps go up to 0.5 nats. I ran this check on the 4-bit
+setups, on the Qwen3-8B bf16 short-prompt setup, and on the two best methods of the small-model comparison. Every method
+whose numbers appear in this post stayed within 0.625 nats.</p>
+<p>One method did not, and I left it out by the rule I had set before running the check. In 1 of 20 prompts, DeepSeek’s
+DSpark drafter (running in SGLang) emitted, as its second token, a token 1.5 nats below the target’s top choice. It was
+otherwise the fastest method on Qwen3-8B in 4-bit (293 tokens per second). The event did not recur: in 40 further DSpark
+runs, including 10 of the same prompt, every token stayed within 0.75 nats, so I cannot say whether it was a defect or a
+one-off.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f16_lossless.svg" class="" title="Per-token gap check " alt="Among tokens with a nonzero gap, counts per 1,000 tokens by gap below the target top choice, for two plain runs, for the four methods that passed, and for DSpark. More than 99 percent of all tokens have a gap of zero; the nonzero ones are 0.125 to 0.625 nats, except one DSpark token at 1.5 nats.">
+<h2 id="What-to-take-away">What to take away</h2>
+<ul>
+<li><strong>Ask what a speedup is compared against.</strong> Retuning a tree for the card gave 6.5% here, about the size of a
+published improvement.</li>
+<li><strong>Compute the weight-read floor of a round</strong> before believing a trick that reschedules or overlaps work. It takes one
+division: bytes per round divided by the bandwidth of a plain decode step.</li>
+<li><strong>On a 24 GB consumer card at batch size 1, the best public drafters are within 6-24% of that floor</strong> (9-28% with
+per-request overheads). What is left has to come from reading fewer bytes, reading them faster than plain decoding
+does, or accepting more tokens per round.</li>
+</ul>
+<h2 id="Scope">Scope</h2>
+<p>One RTX 3090 (24 GB) in SGLang 0.5.20 with CUDA graphs, one request at a time unless stated; Llama-3.1-8B-Instruct and
+Qwen3-8B in bf16 and AWQ-INT4; 60 Spec-Bench prompts for short outputs, 20 Wikipedia passages per length for long
+prompts, and 10-30 MATH-500, AIME 2024 and HumanEval problems for thinking traces.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The scripts, the per-prompt results and the exact model revisions will be in a companion repository; I will add the
+link here once a rerun from that repository has reproduced the numbers above.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/tp-pp-72b-without-p2p/" rel="prev" title="TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer">
+                  <i class="fa fa-angle-left"></i> TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
