@@ -29,7 +29,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/handoff.svg">
 <meta property="article:published_time" content="2026-10-16T16:30:42.000Z">
-<meta property="article:modified_time" content="2026-10-16T16:30:42.468Z">
+<meta property="article:modified_time" content="2026-10-17T05:33:54.806Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -223,8 +223,9 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
+      
 
-      <time title="Created: 2026-10-16 09:30:42" itemprop="dateCreated datePublished" datetime="2026-10-16T09:30:42-07:00">2026-10-16</time>
+      <time title="Created: 2026-10-16 09:30:42 / Modified: 22:33:54" itemprop="dateCreated datePublished" datetime="2026-10-16T09:30:42-07:00">2026-10-16</time>
     </span>
 
   
@@ -237,7 +238,18 @@
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>In the <a href="/posts/host-gpu-bandwidth-without-p2p/">previous post</a> I measured how fast data can move
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p><strong>Updated 2026-10-17.</strong> Two corrections. (1) vLLM v0.30.0 also ships a second route this post
+did not measure: <code>OffloadingConnector</code> with its P2P tier, which I have since measured at about
+3 GB/s on the same two GPUs; and the open pull request
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">vllm#61056</a> speeds up the host-buffer
+configuration measured here by 6 to 7x, to 5.0-5.7 GB/s
+(<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056#issuecomment-6230143118">measurement</a>).
+The NIXL numbers below are unchanged, but “best shipped configuration” now reads “best
+NixlConnector configuration”. (2) The push-mode lease problem below is a known bug in
+v0.30.0, fixed by <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/58188">vllm#58188</a> in v0.31.0.</p>
+</blockquote>
+<p>In the <a href="/posts/host-gpu-bandwidth-without-p2p/">previous post</a> I measured how fast data can move
 between host memory and the GPUs of an 8x RTX 4090 server that has no GPU peer-to-peer. A pinned
 copy from one GPU down to host memory and then up to another GPU runs at about 12.9 GB/s. That
 is the budget for handing a KV cache from a prefill GPU to a decode GPU on this machine.</p>
@@ -401,8 +413,9 @@ GPU and its host buffer.</li>
 blocks … retrieved by 0 remote worker(s) before lease expired” 66 times per round: blocks it
 pushed are never marked as retrieved, so they are freed only when their 30-second lease runs
 out. At 28,672 tokens its KV pool holds only about four requests, so every fourth request waits
-for a lease to expire. I have not found why the
-pushed blocks are never marked as retrieved.</p>
+for a lease to expire. This is a bug in v0.30.0: the producer drops the completion of its own
+writes, so nothing ever marks the blocks as retrieved. It is fixed by
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/58188">vllm#58188</a>, first released in v0.31.0.</p>
 <h2 id="Four-pairs-at-once">Four pairs at once</h2>
 <p>On an eight-GPU machine you would run several prefill/decode pairs side by side, so I also ran
 the host-buffer configuration with up to four pairs handing off at the same moment, two per CPU
@@ -418,11 +431,13 @@ GPU 4 to GPU 5 path still reaches 6.46 GB/s, 8 to 9 times what the handoff uses.
 PCIe path has plenty of headroom, so the limit is in the handoff software, not in the shared
 hardware.</p>
 <h2 id="What-this-means">What this means</h2>
-<p>On PCIe GPUs without peer-to-peer, splitting prefill and decode with vLLM v0.30.0 makes long
-prompts slower to start, by seconds, and the reason is not PCIe. A plain pinned copy through
+<p>On PCIe GPUs without peer-to-peer, splitting prefill and decode with vLLM v0.30.0’s NixlConnector makes
+long prompts slower to start, by seconds, and the reason is not PCIe. A plain pinned copy through
 host memory moves the same cache in about a tenth of a second, a factor of about 16 in
-bandwidth over the best shipped configuration. Building that pinned, host-staged handoff is what
-I am working on next.</p>
+bandwidth over the best NixlConnector configuration. Two faster routes exist: v0.30.0’s
+<code>OffloadingConnector</code> with its P2P tier (about 3 GB/s here) and the open pull request
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">vllm#61056</a> for the host buffer (5.0-5.7 GB/s
+here). Neither reaches half of the pinned copy.</p>
 <p>These numbers describe the v0.30.0 release; I will measure the main branch alongside any change
 of my own.</p>
 <h2 id="Reproduce">Reproduce</h2>
@@ -441,8 +456,8 @@ the exact commands for both parts and the numbers they give on this machine, rou
               <a href="/tags/GPU/" rel="tag"># GPU</a>
               <a href="/tags/PCIe/" rel="tag"># PCIe</a>
               <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
-              <a href="/tags/measurement/" rel="tag"># measurement</a>
               <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
           </div>
 
         
