@@ -45,7 +45,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/fig2_small_drafter.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/speculative-decoding-on-one-rtx-3090/f16_lossless.svg">
 <meta property="article:published_time" content="2026-10-17T23:16:00.000Z">
-<meta property="article:modified_time" content="2026-10-17T23:16:00.905Z">
+<meta property="article:modified_time" content="2026-10-18T20:24:21.821Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -240,6 +240,13 @@
 
       <time title="Created: 2026-10-17 16:16:00" itemprop="dateCreated datePublished" datetime="2026-10-17T16:16:00-07:00">2026-10-17</time>
     </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-18 13:24:21" itemprop="dateModified" datetime="2026-10-18T13:24:21-07:00">2026-10-18</time>
+    </span>
 
   
 </div>
@@ -251,7 +258,15 @@
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>Generating text with a large language model on one GPU is slow for a simple reason: every new token requires reading the
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p><strong>Updated 2026-10-18.</strong> I reran every measurement from the
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/spec-decoding-rtx3090">companion repository</a>. All speed, tau and round-time numbers
+reproduced within 2%. The per-token correctness check on Qwen3-8B in 4-bit did not: the check turned out to be noisy
+on that model, so I rewrote that section. DSpark stays out of the comparison, but as unverified rather than as shown
+to be wrong. I also corrected two numbers there: plain decoding’s own tokens reach a gap of 0.75 nats, not 0.5, and
+DSpark’s 40 extra runs stayed within 0.25 nats, not 0.75.</p>
+</blockquote>
+<p>Generating text with a large language model on one GPU is slow for a simple reason: every new token requires reading the
 whole model from memory once. Speculative decoding gets around this by guessing several tokens cheaply and checking them
 all in a single pass of the big model. On my RTX 3090 it makes Llama-3.1-8B about three times faster without changing
 which tokens the model would choose.</p>
@@ -580,16 +595,21 @@ only 16-22 of 60. On the 4-bit models even plain decoding does not repeat itself
 prompts (Qwen3-8B) and 27 of 60 (Llama-3.1-8B). I do not know which kernel causes that.</p>
 <p>So comparing texts cannot tell an exact method from a slightly wrong one. I checked each emitted token instead. The
 target model alone scores the text, and for every token I measure how far its log-probability is below the target’s top
-choice at that position. More than 99% of tokens have a gap of exactly zero for every method. The rest are near-ties:
-when I score two plain decoding runs the same way, their nonzero gaps go up to 0.5 nats. I ran this check on the 4-bit
-setups, on the Qwen3-8B bf16 short-prompt setup, and on the two best methods of the small-model comparison. Every method
-whose numbers appear in this post stayed within 0.625 nats.</p>
-<p>One method did not, and I left it out by the rule I had set before running the check. In 1 of 20 prompts, DeepSeek’s
-DSpark drafter (running in SGLang) emitted, as its second token, a token 1.5 nats below the target’s top choice. It was
-otherwise the fastest method on Qwen3-8B in 4-bit (293 tokens per second). The event did not recur: in 40 further DSpark
-runs, including 10 of the same prompt, every token stayed within 0.75 nats, so I cannot say whether it was a defect or a
-one-off.</p>
-<img src="/posts/speculative-decoding-on-one-rtx-3090/f16_lossless.svg" class="" title="Per-token gap check " alt="Among tokens with a nonzero gap, counts per 1,000 tokens by gap below the target top choice, for two plain runs, for the four methods that passed, and for DSpark. More than 99 percent of all tokens have a gap of zero; the nonzero ones are 0.125 to 0.625 nats, except one DSpark token at 1.5 nats.">
+choice at that position. I ran this check twice on the 4-bit setups, about two days apart, with the same models and
+software.</p>
+<p>More than 99% of tokens have a gap of exactly zero for every method. On Llama-3.1-8B in 4-bit and on Qwen3-8B in bf16
+with short prompts, every nonzero gap is at most 0.25 nats, for plain decoding and for every speculative method alike.
+In the small-model comparison (Qwen3-8B in bf16 with the thinking template) the two speculative methods stay within
+0.25 nats and plain decoding within 0.5.</p>
+<p>On Qwen3-8B in 4-bit the check itself is noisy. In the second run, plain decoding and four speculative methods produced
+the same 176-token answer to one prompt, byte for byte. Scoring those five identical texts gave largest gaps of 0, 0,
+0, 0.25 and 0.875 nats. Plain decoding’s own tokens reached 0.75 nats. DFlash, the method I report for this setup,
+stayed within 0.625 nats in both runs. Two other methods each had a single token above 1 nat, once and not again:
+DeepSeek’s DSpark drafter, running in SGLang (1.5 nats in the first run, at a token no plain run produced), and the 0.6B
+draft model (1.25 nats in the second run). At that size this check cannot tell a rare defect from its own noise. DSpark
+was otherwise the fastest method on this setup (293 tokens per second), and in 40 further runs its tokens stayed within
+0.25 nats. I leave it out of the comparison as unverified, not as shown to be wrong.</p>
+<img src="/posts/speculative-decoding-on-one-rtx-3090/f16_lossless.svg" class="" title="Largest per-token gap per method in two runs " alt="Left, Llama-3.1-8B 4-bit: every method, plain decoding included, stays at or below 0.25 nats in both runs. Right, Qwen3-8B 4-bit: plain decoding and DFlash stay at or below 0.625 nats in both runs; the EAGLE-3 head reaches 0.875, n-gram copying 0.75 and the 0.6B draft model 1.25 in the second run; DSpark reaches 1.5 in the first run and 1.0 in the second.">
 <h2 id="What-to-take-away">What to take away</h2>
 <ul>
 <li><strong>Ask what a speedup is compared against.</strong> Retuning a tree for the card gave 6.5% here, about the size of a
@@ -605,8 +625,10 @@ does, or accepting more tokens per round.</li>
 Qwen3-8B in bf16 and AWQ-INT4; 60 Spec-Bench prompts for short outputs, 20 Wikipedia passages per length for long
 prompts, and 10-30 MATH-500, AIME 2024 and HumanEval problems for thinking traces.</p>
 <h2 id="Reproduce">Reproduce</h2>
-<p>The scripts, the per-prompt results and the exact model revisions will be in a companion repository; I will add the
-link here once a rerun from that repository has reproduced the numbers above.</p>
+<p>The scripts, the exact model and dataset revisions and the setup are in
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/spec-decoding-rtx3090">rockyshi-dev/spec-decoding-rtx3090</a>. I reran every section from
+that repository on the same card: the speed, tau and round-time numbers above reproduced within 2%, and the per-token
+check behaved as described in the section on whether the output is unchanged.</p>
 
     </div>
 
