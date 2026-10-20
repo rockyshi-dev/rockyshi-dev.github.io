@@ -142,7 +142,7 @@
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">4</span>
+          <span class="site-state-item-count">5</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
@@ -173,6 +173,82 @@
     </div>
 
     <div class="main-inner index posts-expand">
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/nccl-collectives-without-p2p/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content=" | Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/posts/nccl-collectives-without-p2p/" class="post-title-link" itemprop="url">NCCL collectives without GPU peer-to-peer: eight RTX 4090s at 2, 4 and 8 cards, within and across sockets</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-19 23:18:41" itemprop="dateCreated datePublished" datetime="2026-10-19T23:18:41-07:00">2026-10-19</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <p>On a server where no GPU can reach another directly, NCCL stages every byte through host memory. I measured all-reduce, all-gather and send/receive on five GPU sets at the message sizes vLLM uses. Large all-reduces reach 4.4 to 12.4 GB/s of bus bandwidth depending only on how many cards share one socket's PCIe path, and vLLM's decode all-reduce for a 32B model on four cards costs 19 microseconds.</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/posts/nccl-collectives-without-p2p/">
+                Read more &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
 
     
 
