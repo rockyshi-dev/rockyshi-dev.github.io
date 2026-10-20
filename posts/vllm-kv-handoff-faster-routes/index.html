@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has">
+<meta property="og:url" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/routes.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/handoff.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/slope.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/bandwidth.svg">
+<meta property="article:published_time" content="2026-10-20T17:23:14.000Z">
+<meta property="article:modified_time" content="2026-10-20T17:23:14.554Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="PCIe">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/routes.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/","path":"posts/vllm-kv-handoff-faster-routes/","title":"Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-numbers"><span class="nav-number">2.</span> <span class="nav-text">The numbers</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-pull-request-6-to-7-times-the-host-buffer-path"><span class="nav-number">3.</span> <span class="nav-text">The pull request: 6 to 7 times the host-buffer path</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-OffloadingConnector-about-3-GB-s-already-shipped"><span class="nav-number">4.</span> <span class="nav-text">The OffloadingConnector: about 3 GB&#x2F;s, already shipped</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-UCX-setting-out-of-GPU-memory"><span class="nav-number">5.</span> <span class="nav-text">The UCX setting: out of GPU memory</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-this-means"><span class="nav-number">6.</span> <span class="nav-text">What this means</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">7.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">6</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has | Rocky Shi">
+      <meta itemprop="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s OffloadingConnector reaches about 3 GB&#x2F;s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-20 10:23:14" itemprop="dateCreated datePublished" datetime="2026-10-20T10:23:14-07:00">2026-10-20</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">Three existing routes can speed up vLLM's prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB/s); vLLM's OffloadingConnector reaches about 3 GB/s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>In the <a href="/posts/vllm-kv-handoff-without-p2p/">previous post</a> I measured vLLM v0.30.0’s NIXL
+connector handing a KV cache from a prefill GPU to a decode GPU on two RTX 4090s without
+peer-to-peer: 0.4 to 0.8 GB/s, under 7% of the 12.9 GB/s a plain pinned copy between the same two
+GPUs reaches. For a 28,672-token prompt that is two to three extra seconds before the first token.</p>
+<p>I had planned to write a faster handoff myself. Before writing any code I looked for routes that
+already exist, and found three that the first measurement had not covered:</p>
+<ul>
+<li><strong>a UCX setting</strong> that lets the transfer library pipeline a GPU-to-GPU read instead of
+emulating it over TCP;</li>
+<li><strong>an open vLLM pull request</strong>, <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">#61056</a>, that
+replaces the host-buffer path’s per-layer copy with one batched copy;</li>
+<li><strong>vLLM’s <code>OffloadingConnector</code></strong> with its P2P tier, which ships in v0.30.0 and stages the cache
+through pinned host memory with asynchronous copies.</li>
+</ul>
+<p>The short answer: the pull request is the fastest, at 5.0-5.7 GB/s, six to seven times the
+host-buffer path it changes. The OffloadingConnector reaches about 3 GB/s. The UCX setting does not
+complete a long prompt: it runs out of GPU memory. None of them reaches half of the pinned copy.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<p>The same machine, model and method as the previous post:</p>
+<ul>
+<li>vLLM v0.30.0 (the CUDA 12.9 build), NIXL 1.4.1 with its bundled UCX 1.22.0, NVIDIA driver
+550.144.03 (CUDA 12.4).</li>
+<li>Qwen2.5-7B-Instruct in bf16, 57,344 bytes of KV cache per token.</li>
+<li>Prefill on GPU 4, decode on GPU 5: same CPU socket, same PCIe switch, no peer-to-peer.</li>
+<li>Prompts of 2,048, 8,192 and 28,672 tokens, 8 output tokens, 20 measured requests per length
+after warm-up.</li>
+<li><strong>Handoff cost</strong> = time to first token of the prefill/decode pair minus the time to first token
+of the same prompt on one GPU (median of the 20 requests). <strong>Handoff bandwidth</strong> = the KV bytes
+added between 8,192 and 28,672 tokens (1.17 GB) divided by the growth of that cost. I report it
+as a range: the upper end also subtracts the decode side’s own work, the lower end does not.</li>
+<li>Five rounds; in each round every configuration runs once, in a fresh random order, and a pinned
+copy between the two GPUs is measured at the start and the end.</li>
+</ul>
+<img src="/posts/vllm-kv-handoff-faster-routes/routes.svg" class="" title="The routes " alt="GPU 4 and GPU 5 with a host buffer for each instance between them. Host-buffer routes copy the cache down to the prefill buffer, move it host to host through NIXL over shared memory, and copy it up from the decode buffer. The default pull route reads GPU to GPU, emulated over TCP.">
+<p>Each changed configuration differs from its baseline in one thing:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What changes</th>
+<th>Baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UCX pipeline</td>
+<td><code>UCX_RMA_PPLN_ENABLE=y</code> in both servers’ environment</td>
+<td>NixlConnector, pull (the default)</td>
+</tr>
+<tr>
+<td>PR #61056</td>
+<td>the pull request’s diff (one file, <code>kv_connector/utils.py</code>) applied to v0.30.0</td>
+<td>NixlConnector, <code>kv_buffer_device: cpu</code></td>
+</tr>
+<tr>
+<td>OffloadingConnector</td>
+<td><code>OffloadingConnector</code> with a CPU tier of 8 GiB per instance and a <code>p2p</code> secondary tier, as in v0.30.0’s own P2P test</td>
+<td>none; read against the pinned copy</td>
+</tr>
+</tbody>
+</table>
+<p>Before timing, I checked that each changed route actually took its new path. With PR #61056,
+NIXL 1.4.1 page-locks the host buffer when it registers it, so the batched copy ran: all 22 copies
+logged at the three prompt lengths were batched. With the OffloadingConnector, the decode server
+computed none of the prompt itself and loaded every token from the connector.</p>
+<h2 id="The-numbers">The numbers</h2>
+<img src="/posts/vllm-kv-handoff-faster-routes/handoff.svg" class="" title="Extra time to first token " alt="For a 28,672-token prompt: default pull 3.0 s, host buffer 2.1 s, OffloadingConnector 0.7 s, host buffer with PR 61056 0.5 s, against 0.13 s for a pinned copy of the same bytes.">
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>extra time to first token at 28,672 tokens</th>
+<th>handoff bandwidth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NixlConnector, pull (default)</td>
+<td>2.96-3.03 s</td>
+<td>0.57-0.60 GB/s</td>
+</tr>
+<tr>
+<td>NixlConnector, host buffer</td>
+<td>2.02-2.11 s</td>
+<td>0.74-0.81 GB/s</td>
+</tr>
+<tr>
+<td>OffloadingConnector, P2P tier</td>
+<td>0.69-0.72 s</td>
+<td>2.48-3.18 GB/s</td>
+</tr>
+<tr>
+<td>host buffer with PR #61056</td>
+<td>0.49-0.52 s</td>
+<td>3.79-5.66 GB/s</td>
+</tr>
+<tr>
+<td>pinned copy, same bytes</td>
+<td>0.13 s</td>
+<td>12.9 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p>Ranges are over the five rounds (and, for bandwidth, over the lower and upper reading). Every
+request moved exactly the expected number of KV bytes, and every configuration’s 8-token outputs
+matched single-GPU serving on 57 of 60 prompts (a cached single-GPU rerun matched on 58).</p>
+<img src="/posts/vllm-kv-handoff-faster-routes/slope.svg" class="" title="Cost against prompt length " alt="Extra time to first token at 2,048, 8,192 and 28,672 tokens per route. The default pull and the host buffer grow by about 2 and 1.5 seconds; the OffloadingConnector and PR 61056 grow by a few tenths of a second; a pinned copy by about a tenth.">
+<h2 id="The-pull-request-6-to-7-times-the-host-buffer-path">The pull request: 6 to 7 times the host-buffer path</h2>
+<p>The host-buffer configuration moves the cache in three legs: GPU to the prefill server’s host
+buffer, host buffer to host buffer through NIXL, and the decode server’s host buffer to its GPU.
+The middle leg is fast in both builds: NIXL reports 0.05 to 0.11 seconds for it. In v0.30.0 the
+two copies between GPU and host buffer go layer by layer, indexing the host tensor on the CPU.
+From 8,192 to 28,672 tokens, that path’s handoff cost grows by 1.44 seconds; with PR #61056 it
+grows by 0.21 seconds. In every round the bandwidth is 6.2 to 7.2 times the unpatched path.</p>
+<p>At 28,672 tokens the patched handoff still costs 0.50 seconds. About 0.13 s of that is the decode
+server’s own work, about 0.11 s the NIXL leg, and the rest, roughly a quarter of a second, the two
+copies and fixed costs; the pull request keeps the copies synchronous. I posted these numbers on
+the <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056#issuecomment-6230143118">pull request</a>.</p>
+<h2 id="The-OffloadingConnector-about-3-GB-s-already-shipped">The OffloadingConnector: about 3 GB/s, already shipped</h2>
+<p>The OffloadingConnector’s P2P tier needs no patch. It stages the cache in a pinned CPU tier on each
+instance, with asynchronous copies, and moves blocks between the two tiers through NIXL, here over
+shared memory. It handed off at 2.5 to 3.2 GB/s, four times the host-buffer configuration of the
+NIXL connector. Its request flow differs from the NIXL connector’s (its own proxy, an asynchronous
+copy down, 16-token offload blocks), so I read it against the pinned copy, not against PR #61056.</p>
+<h2 id="The-UCX-setting-out-of-GPU-memory">The UCX setting: out of GPU memory</h2>
+<p><code>UCX_RMA_PPLN_ENABLE=y</code> turns on UCX’s rendezvous pipeline for remote reads, the path that could
+replace the TCP emulation. With it, the decode server completed the 2,048- and 8,192-token
+prompts and failed during the first 28,672-token transfer:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">cuMemAlloc_v2(&amp;alloc_handle-&gt;ptr, alloc_handle-&gt;length) failed: out of memory</span><br><span class="line">failed to allocate 536870912 bytes using md cuda_cpy for ucp_rndv_frags: Out of memory</span><br></pre></td></tr></table></figure>
+<p>UCX allocates the pipeline’s fragment pool in 512 MiB chunks of <strong>GPU</strong> memory, not host memory.
+By the long prompt, GPU 5 held about 23.8 of its 24.6 GB, nearly all of it held by vLLM (weights, KV cache
+and workspace under its default memory budget), and the next chunk did not fit. NIXL reported the failure and vLLM failed
+the request. Making this route work means giving up GPU memory or changing where UCX puts its
+fragments, which is a different experiment; I report no bandwidth for it.</p>
+<img src="/posts/vllm-kv-handoff-faster-routes/bandwidth.svg" class="" title="Bandwidth against the pinned copy " alt="Handoff bandwidth ranges: default pull about 0.6, host buffer about 0.8, OffloadingConnector 2.5 to 3.2, PR 61056 3.8 to 5.7 GB&#x2F;s, against 12.9 GB&#x2F;s for the pinned copy and 6.4 for half of it.">
+<h2 id="What-this-means">What this means</h2>
+<p>On two PCIe GPUs without peer-to-peer, the cheapest improvement to vLLM v0.30.0’s prefill-to-decode
+handoff is configuration: the OffloadingConnector’s P2P tier cuts the extra time to first token at
+28,672 tokens from about 2 to 3 seconds to 0.7 seconds, with no code change. PR #61056, if merged,
+does better on the NIXL connector’s host buffer: 0.5 seconds. Neither reaches half of what a plain
+pinned copy between the same two GPUs moves (best: 0.44 of it), so a handoff that overlaps its legs
+still has room. The PR #61056 path would be the baseline for that.</p>
+<p>Two side notes from the previous post: the push mode’s 30-second lease waits are a v0.30.0 bug,
+fixed in v0.31.0 by <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/58188">vllm#58188</a>; and the
+default pull configuration falling back to TCP emulation without any log line is now
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/issues/62080">vllm#62080</a>.</p>
+<p>These numbers hold for vLLM v0.30.0, NIXL 1.4.1 and driver 550 on this pair of RTX 4090s, at
+prompts of 2,048 to 28,672 tokens.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The measurement method and both NixlConnector baselines are in
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/kv-handoff-bench">rockyshi-dev/kv-handoff-bench</a>.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/PCIe/" rel="tag"># PCIe</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/nccl-collectives-without-p2p/" rel="prev" title="NCCL collectives without GPU peer-to-peer: eight RTX 4090s at 2, 4 and 8 cards, within and across sockets">
+                  <i class="fa fa-angle-left"></i> NCCL collectives without GPU peer-to-peer: eight RTX 4090s at 2, 4 and 8 cards, within and across sockets
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
