@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="I ran the 32 GEMM kernels that four LLMs wrote for Llama-3.1-8B in FlashInfer-Trace on an RTX 4090 at decode batch sizes. 19 compile, run correctly and survive CUDA-graph capture; none is faster than">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap">
+<meta property="og:url" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="I ran the 32 GEMM kernels that four LLMs wrote for Llama-3.1-8B in FlashInfer-Trace on an RTX 4090 at decode batch sizes. 19 compile, run correctly and survive CUDA-graph capture; none is faster than">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/cell.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/outcomes.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/speedup.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/bandwidth.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/splitk.svg">
+<meta property="article:published_time" content="2026-10-23T04:29:10.000Z">
+<meta property="article:modified_time" content="2026-10-23T04:29:10.047Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="CUDA">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="measurement">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/cell.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/","path":"posts/llm-gemm-kernels-on-rtx-4090/","title":"LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-happened-to-the-32-solutions"><span class="nav-number">2.</span> <span class="nav-text">What happened to the 32 solutions</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#None-is-faster"><span class="nav-number">3.</span> <span class="nav-text">None is faster</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#There-was-room"><span class="nav-number">4.</span> <span class="nav-text">There was room</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-trap-in-the-reference"><span class="nav-number">5.</span> <span class="nav-text">The trap in the reference</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">7</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap | Rocky Shi">
+      <meta itemprop="description" content="I ran the 32 GEMM kernels that four LLMs wrote for Llama-3.1-8B in FlashInfer-Trace on an RTX 4090 at decode batch sizes. 19 compile, run correctly and survive CUDA-graph capture; none is faster than cuBLAS. Along the way, PyTorch&#39;s default F.linear failed its own correctness check at M &#x3D; 32.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-22 21:29:10" itemprop="dateCreated datePublished" datetime="2026-10-22T21:29:10-07:00">2026-10-22</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">I ran the 32 GEMM kernels that four LLMs wrote for Llama-3.1-8B in FlashInfer-Trace on an RTX 4090 at decode batch sizes. 19 compile, run correctly and survive CUDA-graph capture; none is faster than cuBLAS. Along the way, PyTorch's default F.linear failed its own correctness check at M = 32.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>Several projects now publish GPU kernels written by LLM agents, with speedups measured on the
+hardware they were written for. <a target="_blank" rel="noopener" href="https://huggingface.co/datasets/flashinfer-ai/flashinfer-trace">FlashInfer-Trace</a>
+is one: it ships, among much else, fp16 GEMM solutions for the four linear layers of Llama-3.1-8B,
+written by claude-opus-4.1, gemini-2.5-pro, gpt-5 and o3, one CUDA and one Triton solution per
+model and shape, all declared for B200.</p>
+<p>I wanted to know whether any of them helps a serving engine on a consumer card. So I ran all 32,
+exactly as published, against <code>F.linear</code> (cuBLAS, what vLLM runs for these layers) on an RTX 4090,
+at the decode batch sizes where a custom kernel has its best chance: M = 1, 8 and 32.</p>
+<p>The short answer: 19 of the 32 compile, run, give correct results and survive CUDA-graph capture.
+None of them is faster than cuBLAS on any shape at any batch size. The best kernel that is the
+solution’s own code reaches 0.52x, 0.79x, 0.49x and 0.92x of cuBLAS on the four shapes. And on two
+shapes at M = 32, the reference itself failed the correctness check, because of a PyTorch default.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<p>The material is FlashInfer-Trace at commit <code>da915083</code>: 32 solutions, used exactly as published.
+Their source bytes are written out and hashed, and nothing is repaired; a missing <code>#include</code> is an
+outcome, not a bug for me to fix.</p>
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>Layer</th>
+<th>Weight</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>N = 6144, K = 4096</td>
+<td>QKV projection</td>
+<td>48 MiB</td>
+</tr>
+<tr>
+<td>N = 28672, K = 4096</td>
+<td>gate and up projection</td>
+<td>224 MiB</td>
+</tr>
+<tr>
+<td>N = 4096, K = 4096</td>
+<td>attention output</td>
+<td>32 MiB</td>
+</tr>
+<tr>
+<td>N = 4096, K = 14336</td>
+<td>down projection</td>
+<td>112 MiB</td>
+</tr>
+</tbody>
+</table>
+<p>Each solution computes <code>C = A @ B.T</code> in fp16, A of shape [M, K] and B of shape [N, K]. One
+measurement cell is one solution at one M in one round, in its own process on the GPU:</p>
+<img src="/posts/llm-gemm-kernels-on-rtx-4090/cell.svg" class="" title="One measurement cell " alt="Five steps: compile for sm_89 within 600 seconds; check 20 random inputs and 5 inputs with real Llama weights against cuBLAS; time 200 interleaved pairs with the L2 flushed before each call; capture into a CUDA graph and compare the replay; check in an nsys trace that the kernel that ran is defined in the solution.">
+<ul>
+<li><strong>Correctness</strong>: 20 random fp16 inputs and 5 inputs whose B is a real weight matrix of the model,
+each within rtol = atol = 1e-2 of <code>F.linear</code> (FlashInfer-Bench’s default tolerance).</li>
+<li><strong>Time</strong>: 200 pairs, <code>F.linear</code> then the solution, each call preceded by a 192 MiB write that
+flushes the 72 MB L2, each call timed with CUDA events. The speedup is
+s = median cuBLAS time / median solution time.</li>
+<li><strong>Capture</strong>: the solution runs inside a CUDA graph and the replay must equal the eager output,
+because that is how vLLM runs decode.</li>
+<li><strong>Own kernel</strong>: a solution counts as its own code only if the kernel in its nsys trace is one it
+defines. Seven solutions define no kernel they launch; they call cuBLAS, cuBLASLt or ATen. I
+report these <strong>wrappers</strong> separately.</li>
+</ul>
+<p>Five rounds, each running all 96 cells (32 solutions x 3 batch sizes). A solution would count as
+faster only with s above 1.05 in all five rounds. A round was accepted only if no other process
+used the GPU, other processes used at most 2% of each CPU socket, and the GPU clock stayed within
+3% of the first round’s. All five rounds passed on their first attempt.</p>
+<h2 id="What-happened-to-the-32-solutions">What happened to the 32 solutions</h2>
+<img src="/posts/llm-gemm-kernels-on-rtx-4090/outcomes.svg" class="" title="Outcomes " alt="Of 32 solutions: 7 do not compile, 1 compiles but cannot start, 1 gives wrong results, 4 are correct but cannot be captured in a CUDA graph, 19 are correct and capturable (16 own kernels and 3 wrappers).">
+<ul>
+<li><strong>Seven do not compile</strong> for sm_89, all for reasons in their own source: <code>printf</code> without
+<code>&lt;cstdio&gt;</code>, CUDA stream and guard helpers used without their headers, a <code>wmma::store_matrix_sync</code>
+overload error, a stray <code>&lt;![CDATA[</code> as the first line, a pybind11 annotation mismatch, a call to a
+function that does not exist. These are exactly the seven that FlashInfer-Bench itself recorded
+as <code>COMPILE_ERROR</code> on B200.</li>
+<li><strong>One compiles but cannot start</strong>: it asks for more dynamic shared memory per block than the RTX
+4090 allows (about 99 KB, against about 227 KB on B200). It passed on B200.</li>
+<li><strong>One gives wrong results</strong> at every batch size, as it does in FlashInfer-Bench’s B200 traces.</li>
+<li><strong>Four are correct but cannot be captured</strong> in a CUDA graph: two create a cuBLAS handle or
+cuBLASLt descriptors on every call, and two call <code>torch.cuda.synchronize()</code> inside the kernel
+call. One of the latter also took more than 10 minutes to compile from a cold cache.</li>
+<li><strong>Nineteen are correct and capturable</strong>: 16 own kernels and 3 wrappers.</li>
+</ul>
+<h2 id="None-is-faster">None is faster</h2>
+<img src="/posts/llm-gemm-kernels-on-rtx-4090/speedup.svg" class="" title="Speedup over cuBLAS " alt="Per shape and batch size, every solution that ran. Own kernels range from about 0.1 to 0.92 of cuBLAS; wrappers sit at 1.0, where they run the same cuBLAS kernel. No point reaches the 1.05 line.">
+<table>
+<thead>
+<tr>
+<th>Shape</th>
+<th>best own kernel, M = 1 / 8 / 32</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>attention out (32 MiB)</td>
+<td>0.52 / 0.52 / 0.52</td>
+</tr>
+<tr>
+<td>QKV (48 MiB)</td>
+<td>0.73 / 0.75 / 0.79</td>
+</tr>
+<tr>
+<td>down (112 MiB)</td>
+<td>0.38 / 0.46 / 0.49</td>
+</tr>
+<tr>
+<td>gate and up (224 MiB)</td>
+<td>0.80 / 0.92 / 0.92</td>
+</tr>
+</tbody>
+</table>
+<p>Values are five-round medians of s for own kernels that are correct and capturable (at M = 32 on
+the first two shapes their correctness entries are withdrawn; see the last section). The highest
+single-round s of any cell, of any kind, is 1.016, and that is a wrapper calling cuBLAS. The
+wrappers that run the same cuBLAS kernel measure 1.000, which also shows that the solution’s slot in
+the timing loop carries no penalty of its own.</p>
+<p>FlashInfer-Bench’s B200 traces report 6-107x for some of these solutions at small batch sizes.
+Those factors are against its own reference timing, not against cuBLAS, so they cannot be compared
+with the numbers here.</p>
+<h2 id="There-was-room">There was room</h2>
+<p>I expected few wins because cuBLAS would already run these decode-sized GEMMs near the card’s memory
+bandwidth. It does not:</p>
+<img src="/posts/llm-gemm-kernels-on-rtx-4090/bandwidth.svg" class="" title="cuBLAS bandwidth " alt="Weight bytes streamed per second by cuBLAS after an L2 flush: 559 to 638 GB&#x2F;s on the 32 and 48 MiB shapes, 610 to 780 on the 112 MiB shape, 752 to 866 on the 224 MiB shape, against 1,008 GB&#x2F;s specified.">
+<p>After the L2 flush, cuBLAS streams the weights at 559 to 866 GB/s, 55% to 86% of the RTX 4090’s
+1,008 GB/s specification, and below 64% on the two small shapes. A kernel that streamed those
+weights at 90% of the specification would be about 1.4x to 1.6x faster than cuBLAS on them. The
+published kernels did not get there: they were written and tuned for B200 (every solution declares
+B200 as its target, and 22 of the 32 sources name B200 in their comments). Whether that room can be
+taken on this card is a separate question this audit does not answer.</p>
+<h2 id="The-trap-in-the-reference">The trap in the reference</h2>
+<p>At M = 32, on the attention-output and QKV shapes, nine kernels failed the random-input checks in
+every round: 20 of 20 random inputs out of tolerance, while all 5 real-weight inputs passed. Before
+calling nine kernels from four different models wrong, I checked the reference: <code>F.linear</code> and one
+of the failing kernels against a float64 product of the same fp16 inputs, 100 random inputs per
+condition.</p>
+<img src="/posts/llm-gemm-kernels-on-rtx-4090/splitk.svg" class="" title="F.linear against float64 " alt="Worst error in units of the tolerance, log scale. At M &#x3D; 8 every condition passes 100 of 100. At M &#x3D; 32 with the PyTorch default, F.linear fails 100 of 100 with a worst error of 5.8 and 4.8 times the tolerance; with the fp16 reduction turned off it passes 100 of 100.">
+<p>The reference was at fault. At M = 32 on these two shapes, cuBLAS picks a split-K kernel. With
+PyTorch’s default, <code>torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True</code>, the
+partial sums are reduced in fp16 (the trace shows <code>splitKreduce_kernel</code> reading <code>__half</code> partials),
+and <code>F.linear</code> then fails every one of the 100 inputs against float64, with a worst error of 5.8 and
+4.8 times the tolerance. With the flag set to False, the attention-output shape keeps split-K but
+reduces in fp32, the QKV shape gets an unsplit kernel, and <code>F.linear</code> passes all 100 on both. The kernel I tested passed all 100 against float64 either way. At M = 8
+cuBLAS uses a single GEMM kernel and everything passes.</p>
+<p>The errors are few and specific: at most 0.22% of the output elements of a failing input, all with a
+true value near zero, where the partial sums cancel and the fp16 rounding of each partial stays in
+the result.</p>
+<p>This behaviour is documented. PyTorch’s notes on
+<a target="_blank" rel="noopener" href="https://docs.pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms">reduced precision reduction in fp16 GEMMs</a>
+describe the flag and its cost in precision, and a maintainer explains the trade-off in
+<a target="_blank" rel="noopener" href="https://github.com/pytorch/pytorch/issues/116870">pytorch/pytorch#116870</a>. What it does to a
+kernel benchmark is less obvious: if <code>F.linear</code> with default settings is the correctness reference,
+a correct kernel can be marked incorrect at exactly the decode batch sizes where cuBLAS switches to
+split-K. In this audit I withdrew those nine correctness entries rather than counting them either
+way; every one of the nine was 0.17x to 0.79x of cuBLAS, so the conclusion does not depend on them.
+For a benchmark: set the flag to False for the reference, or compare against a float64 product.</p>
+<p>These numbers hold for the 32 fp16 GEMM solutions of FlashInfer-Trace at <code>da915083</code>, on an RTX
+4090 with PyTorch 2.13 and its bundled cuBLAS, at M = 1, 8 and 32.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The audit is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/gen-kernel-audit">rockyshi-dev/gen-kernel-audit</a>.
+A second, independent run of that repository on the same machine reproduced every outcome and
+speedup above, including the withdrawn entries.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/CUDA/" rel="tag"># CUDA</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/vllm-kv-handoff-faster-routes/" rel="prev" title="Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has">
+                  <i class="fa fa-angle-left"></i> Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
