@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="A beginner&#39;s walk-through: build a Slurm cluster with four compute nodes out of Docker containers on one workstation, then submit jobs, ask for GPUs, run a two-node PyTorch DDP job and watch the clust">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Learning Slurm on one machine: a four-node practice cluster in Docker">
+<meta property="og:url" content="https://rockyshi.dev/posts/slurm-cluster-in-docker/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="A beginner&#39;s walk-through: build a Slurm cluster with four compute nodes out of Docker containers on one workstation, then submit jobs, ask for GPUs, run a two-node PyTorch DDP job and watch the clust">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/slurm-cluster-in-docker/layout.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/slurm-cluster-in-docker/timeline.svg">
+<meta property="article:published_time" content="2026-10-23T16:33:17.000Z">
+<meta property="article:modified_time" content="2026-10-23T16:33:34.937Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="Slurm">
+<meta property="article:tag" content="distributed training">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/slurm-cluster-in-docker/layout.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/slurm-cluster-in-docker/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/slurm-cluster-in-docker/","path":"posts/slurm-cluster-in-docker/","title":"Learning Slurm on one machine: a four-node practice cluster in Docker"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Learning Slurm on one machine: a four-node practice cluster in Docker | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-What-a-Slurm-cluster-is-made-of"><span class="nav-number">1.</span> <span class="nav-text">1. What a Slurm cluster is made of</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-Build-the-cluster"><span class="nav-number">2.</span> <span class="nav-text">2. Build the cluster</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#One-image-for-every-role"><span class="nav-number">2.1.</span> <span class="nav-text">One image for every role</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Describe-the-cluster-slurm-conf"><span class="nav-number">2.2.</span> <span class="nav-text">Describe the cluster: slurm.conf</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Fake-GPUs-gres-conf"><span class="nav-number">2.3.</span> <span class="nav-text">Fake GPUs: gres.conf</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Compose-file-and-first-start"><span class="nav-number">2.4.</span> <span class="nav-text">Compose file and first start</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Your-first-jobs"><span class="nav-number">3.</span> <span class="nav-text">3. Your first jobs</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Asking-for-GPUs"><span class="nav-number">4.</span> <span class="nav-text">4. Asking for GPUs</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-Who-goes-first-priority"><span class="nav-number">5.</span> <span class="nav-text">5. Who goes first: priority</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-A-two-node-DDP-job"><span class="nav-number">6.</span> <span class="nav-text">6. A two-node DDP job</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-When-a-node-goes-away"><span class="nav-number">7.</span> <span class="nav-text">7. When a node goes away</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#8-Preemption"><span class="nav-number">8.</span> <span class="nav-text">8. Preemption</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#9-Pitfalls-when-running-Slurm-23-11-in-containers"><span class="nav-number">9.</span> <span class="nav-text">9. Pitfalls when running Slurm 23.11 in containers</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#10-Command-summary"><span class="nav-number">10.</span> <span class="nav-text">10. Command summary</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">11.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">8</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/slurm-cluster-in-docker/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Learning Slurm on one machine: a four-node practice cluster in Docker | Rocky Shi">
+      <meta itemprop="description" content="A beginner&#39;s walk-through: build a Slurm cluster with four compute nodes out of Docker containers on one workstation, then submit jobs, ask for GPUs, run a two-node PyTorch DDP job and watch the cluster recover when a node goes away. Every output shown comes from a real run.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Learning Slurm on one machine: a four-node practice cluster in Docker
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-10-23 09:33:17 / Modified: 09:33:34" itemprop="dateCreated datePublished" datetime="2026-10-23T09:33:17-07:00">2026-10-23</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">A beginner's walk-through: build a Slurm cluster with four compute nodes out of Docker containers on one workstation, then submit jobs, ask for GPUs, run a two-node PyTorch DDP job and watch the cluster recover when a node goes away. Every output shown comes from a real run.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>Most GPU training clusters are run by Slurm. If you have never used it, the first hours on a real cluster go to
+learning its commands, and on a rented cluster those hours are billed. None of that learning needs a GPU. This
+post builds a small Slurm cluster from Docker containers on one machine, so you can practise everything except the
+GPUs themselves.</p>
+<p>By the end you will have:</p>
+<ol>
+<li>a cluster with one controller and four compute nodes, each claiming four (fake) GPUs;</li>
+<li>submitted, watched and cancelled jobs, and seen a time limit and a priority at work;</li>
+<li>run a PyTorch DDP job across two nodes, launched by Slurm;</li>
+<li>stopped a node in the middle of that job and watched Slurm put the job back in the queue and restart it from
+its last checkpoint.</li>
+</ol>
+<p>What you need: Linux with Docker (I used Docker 29.1.3 on Ubuntu, 16 CPU threads, 62 GB of memory) and basic
+familiarity with Docker and PyTorch. The cluster runs on CPUs only, so it teaches how Slurm schedules and launches
+work; how fast GPUs talk to each other across nodes is a question for real hardware.</p>
+<span id="more"></span>
+<h2 id="1-What-a-Slurm-cluster-is-made-of">1. What a Slurm cluster is made of</h2>
+<p>A Slurm cluster is a handful of programs that talk to each other over the network. Four matter here:</p>
+<table>
+<thead>
+<tr>
+<th>program</th>
+<th>runs on</th>
+<th>what it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>slurmctld</code></td>
+<td>one controller machine</td>
+<td>the scheduler: keeps the queue, decides which job runs on which nodes</td>
+</tr>
+<tr>
+<td><code>slurmd</code></td>
+<td>every compute node</td>
+<td>starts and stops the job’s processes on that node, reports back to the controller</td>
+</tr>
+<tr>
+<td><code>slurmdbd</code></td>
+<td>one machine, with a database</td>
+<td>stores the history of every job, so you can ask afterwards what ran and how it ended</td>
+</tr>
+<tr>
+<td><code>munged</code></td>
+<td>every machine</td>
+<td>proves to the others which user sent each request; every machine holds the same secret key</td>
+</tr>
+</tbody>
+</table>
+<p>And six words you will meet in every command:</p>
+<table>
+<thead>
+<tr>
+<th>word</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>node</td>
+<td>one machine that runs jobs</td>
+</tr>
+<tr>
+<td>partition</td>
+<td>a named group of nodes with its own rules (time limit, priority); a queue, in effect</td>
+</tr>
+<tr>
+<td>job</td>
+<td>one request: “give me these resources and run this”</td>
+</tr>
+<tr>
+<td>job step</td>
+<td>one launch of processes inside a job; each <code>srun</code> starts one, and the batch script itself runs as one</td>
+</tr>
+<tr>
+<td>task</td>
+<td>one process of a step; a step with four tasks on each of two nodes has eight processes</td>
+</tr>
+<tr>
+<td>GRES</td>
+<td>“generic resource”: anything countable besides CPUs and memory, here GPUs</td>
+</tr>
+</tbody>
+</table>
+<p>In the practice cluster each of these programs gets its own container:</p>
+<img src="/posts/slurm-cluster-in-docker/layout.svg" class="" title="Practice cluster layout " alt="slurmctld, slurmdbd with MariaDB and four compute containers c1 to c4 on one Docker network, the controller and compute nodes sharing one directory for logs and checkpoints">
+<p>Seven containers in total: the controller, the accounting daemon, its MariaDB database, and four compute nodes
+<code>c1</code> to <code>c4</code>. The four Slurm programs’ containers run <code>munged</code> (the database does not). A directory on the host is mounted as
+<code>/shared</code> in the controller and in the four compute nodes; it plays the part of the shared file system that a real cluster has, and it is where job output and checkpoints go.</p>
+<h2 id="2-Build-the-cluster">2. Build the cluster</h2>
+<p>The files below are abridged to the lines that matter.</p>
+<h3 id="One-image-for-every-role">One image for every role</h3>
+<p>All Slurm containers use the same image. It is Ubuntu 24.04 with Slurm from the distribution’s packages (version
+23.11.4), munge, and a CPU-only PyTorch for the training example:</p>
+<figure class="highlight dockerfile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">FROM</span> ubuntu:<span class="number">24.04</span></span><br><span class="line"><span class="keyword">RUN</span><span class="language-bash"> apt-get update &amp;&amp; apt-get install -y --no-install-recommends \</span></span><br><span class="line"><span class="language-bash">        slurm-wlm slurmdbd slurm-client munge mariadb-client python3 python3-venv</span></span><br><span class="line"><span class="keyword">RUN</span><span class="language-bash"> python3 -m venv /opt/venv &amp;&amp; /opt/venv/bin/pip install \</span></span><br><span class="line"><span class="language-bash">        --index-url https://download.pytorch.org/whl/cpu torch</span></span><br><span class="line"><span class="keyword">RUN</span><span class="language-bash"> userdel -r ubuntu; useradd -m -u 1000 -s /bin/bash lab    <span class="comment"># ubuntu:24.04 already uses uid 1000</span></span></span><br></pre></td></tr></table></figure>
+<p>The user <code>lab</code> submits the jobs. It has the same user id as my account on the host, so files that jobs write into
+<code>/shared</code> can be read and deleted from the host without <code>sudo</code>.</p>
+<p>An environment variable <code>ROLE</code> tells each container which program to start. The start script does three things
+for every role: installs the shared munge key (the same secret file on every machine; without it the programs
+reject each other), copies the configuration into <code>/etc/slurm</code>, and starts the program for its role.</p>
+<h3 id="Describe-the-cluster-slurm-conf">Describe the cluster: slurm.conf</h3>
+<p><code>slurm.conf</code> is the one file that describes the whole cluster, and every machine reads the same copy. These are
+the lines that matter for a first cluster:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">ClusterName=lab</span><br><span class="line">SlurmctldHost=slurmctld                  # where the controller runs (a container name)</span><br><span class="line">AccountingStorageType=accounting_storage/slurmdbd</span><br><span class="line">AccountingStorageHost=slurmdbd           # where the accounting daemon runs</span><br><span class="line"></span><br><span class="line"># what a job may share: cores, memory and GPUs are handed out separately, not whole nodes</span><br><span class="line">SelectType=select/cons_tres</span><br><span class="line">SelectTypeParameters=CR_Core_Memory</span><br><span class="line">DefMemPerCPU=1000                        # memory a job gets per CPU if it does not ask (without it: the whole node)</span><br><span class="line">GresTypes=gpu                            # this cluster has a countable resource called gpu</span><br><span class="line"></span><br><span class="line"># how processes are tracked; cgroup-based choices do not work in an unprivileged container (section 9)</span><br><span class="line">ProctrackType=proctrack/linuxproc</span><br><span class="line">TaskPlugin=task/none</span><br><span class="line"></span><br><span class="line">PriorityType=priority/multifactor        # priority = weighted sum of factors (section 5); the default is first-come</span><br><span class="line">PreemptType=preempt/partition_prio       # a higher-tier partition may push out jobs (section 8)</span><br><span class="line">SlurmdTimeout=30                         # a node silent for 30 s counts as dead (default 300)</span><br><span class="line">ReturnToService=2                        # a dead node that registers again is put back in use automatically</span><br><span class="line">JobRequeue=1                             # batch jobs may be requeued after a node failure (section 7)</span><br><span class="line">KillWait=10                              # seconds between SIGTERM and SIGKILL when a job is ended</span><br><span class="line"></span><br><span class="line">NodeName=c[1-4] CPUs=4 RealMemory=4000 Gres=gpu:4 State=UNKNOWN</span><br><span class="line">PartitionName=main Nodes=c[1-4] Default=YES MaxTime=02:00:00 PriorityTier=1</span><br><span class="line">PartitionName=low  Nodes=c[1-4] MaxTime=02:00:00 PriorityTier=1 PreemptMode=REQUEUE</span><br><span class="line">PartitionName=high Nodes=c[1-4] MaxTime=02:00:00 PriorityTier=2 PreemptMode=OFF</span><br></pre></td></tr></table></figure>
+<p><code>NodeName=c[1-4]</code> declares four nodes at once; <code>c[1-4]</code> is Slurm’s shorthand for <code>c1,c2,c3,c4</code>, and you will see
+it in every command’s output. Each node claims 4 CPUs, 4000 MB of memory and 4 GPUs. Docker limits each compute
+container to 4 CPUs to match. The three partitions all contain the same four nodes; <code>main</code> is the default, and
+<code>low</code> and <code>high</code> are only used in the preemption example at the end.</p>
+<p><code>DefMemPerCPU</code> deserves a word. With <code>CR_Core_Memory</code>, memory is a resource that jobs reserve just like cores.
+A job that does not say how much it needs (<code>--mem</code>) gets the default, and if no default is set, it reserves the
+whole node’s memory. Then a one-CPU job blocks a four-CPU node by itself, which is easy to mistake for a shortage
+of CPUs or GPUs.</p>
+<h3 id="Fake-GPUs-gres-conf">Fake GPUs: gres.conf</h3>
+<p><code>Gres=gpu:4</code> above says each node has four GPUs. A second file, <code>gres.conf</code>, tells <code>slurmd</code> which device files
+those GPUs are. The containers have no GPUs, so I point it at four device files that exist everywhere:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">NodeName=c[1-4] Name=gpu File=/dev/null,/dev/zero,/dev/full,/dev/random</span><br></pre></td></tr></table></figure>
+<p>Slurm does not open them. It only counts them, schedules jobs against the count, and tells each job which of the
+four it was given. That is enough to practise asking for GPUs.</p>
+<h3 id="Compose-file-and-first-start">Compose file and first start</h3>
+<p>The compose file has one service per container. The parts worth seeing are a compute node and the shared
+directory:</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">c1:</span></span><br><span class="line">  <span class="attr">build:</span> <span class="string">.</span>                                <span class="comment"># the image from the Dockerfile above</span></span><br><span class="line">  <span class="attr">image:</span> <span class="string">slurm-lab:local</span></span><br><span class="line">  <span class="attr">hostname:</span> <span class="string">c1</span></span><br><span class="line">  <span class="attr">environment:</span> &#123; <span class="attr">ROLE:</span> <span class="string">slurmd</span> &#125;</span><br><span class="line">  <span class="attr">cpus:</span> <span class="number">4</span></span><br><span class="line">  <span class="attr">volumes:</span></span><br><span class="line">    <span class="bullet">-</span> <span class="string">./config:/etc/slurm-lab:ro</span>          <span class="comment"># slurm.conf, gres.conf, munge key</span></span><br><span class="line">    <span class="bullet">-</span> <span class="string">./data/shared:/shared</span>               <span class="comment"># the &quot;shared file system&quot;</span></span><br></pre></td></tr></table></figure>
+<p>Two things must exist before the first start. The munge key is any 1024 random bytes, the same file for every
+container. The shared directory must belong to uid 1000, the user <code>lab</code> inside the containers, or jobs cannot
+write their output there (section 9):</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">dd</span> <span class="keyword">if</span>=/dev/urandom of=config/munge.key bs=1024 count=1 &amp;&amp; <span class="built_in">chmod</span> 600 config/munge.key</span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">mkdir</span> -p data/shared/logs data/shared/ckpt     <span class="comment"># owned by my user, uid 1000</span></span></span><br></pre></td></tr></table></figure>
+<p>Then start everything and ask the controller what it sees. <code>sinfo</code> lists partitions and the state of their nodes:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">docker compose up -d --build</span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">docker <span class="built_in">exec</span> slurmctld sinfo</span></span><br><span class="line">PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST</span><br><span class="line">main*        up    2:00:00      4   idle c[1-4]</span><br><span class="line">low          up    2:00:00      4   idle c[1-4]</span><br><span class="line">high         up    2:00:00      4   idle c[1-4]</span><br></pre></td></tr></table></figure>
+<p>Four <code>idle</code> nodes in each partition means every <code>slurmd</code> has registered with the controller and is waiting for
+work. The <code>*</code> after <code>main</code> marks the default partition. <code>sinfo -N</code> shows one line per node instead, with its
+CPUs, memory, GPUs and partition:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">docker <span class="built_in">exec</span> slurmctld sinfo -N -o <span class="string">&quot;%N %c %m %G %t %P&quot;</span></span></span><br><span class="line">NODELIST CPUS MEMORY GRES STATE PARTITION</span><br><span class="line">c1 4 4000 gpu:4 idle main*</span><br><span class="line">c1 4 4000 gpu:4 idle low</span><br><span class="line">c1 4 4000 gpu:4 idle high</span><br><span class="line">c2 4 4000 gpu:4 idle main*</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<p>Each node appears once per partition it belongs to, so <code>c1</code> is listed three times.</p>
+<p>From here on, every command runs inside the controller container as user <code>lab</code>
+(<code>docker exec -it -u lab -w /shared/logs slurmctld bash</code>), the way you would log in to a cluster’s login node.</p>
+<h2 id="3-Your-first-jobs">3. Your first jobs</h2>
+<p>There are two ways to run something:</p>
+<ul>
+<li><strong><code>srun</code></strong> runs a command on the cluster and waits for it, printing its output in your terminal. Used on its own,
+it first creates a job and waits in the queue like any other job; inside a batch script it starts processes on
+the nodes the job already has. Good for quick checks.</li>
+<li><strong><code>sbatch</code></strong> puts a script in the queue and returns at once with a job id. The script runs when resources free
+up, and its output goes to a file (<code>slurm-&lt;job id&gt;.out</code> in the directory you submitted from). This is how
+training jobs are run.</li>
+</ul>
+<p><code>sbatch --wrap</code> turns a one-line command into a script, which is handy for practice. Submit, look at the queue,
+cancel:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --parsable -t 5 --wrap <span class="string">&#x27;hostname; sleep 60&#x27;</span>     <span class="comment"># --parsable prints only the job id</span></span></span><br><span class="line">10</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">squeue</span></span><br><span class="line">             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)</span><br><span class="line">                10      main     wrap      lab  R       0:03      1 c1</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">scancel 10</span></span><br></pre></td></tr></table></figure>
+<p>In <code>squeue</code>, <code>ST</code> is the state: <code>R</code> running, <code>PD</code> pending (waiting). For a running job the last column lists its
+nodes; for a pending job it gives the reason it is waiting, which section 4 uses. <code>--wrap</code> jobs are all named
+<code>wrap</code>.</p>
+<p><code>sacct</code> reads the job history from the database, so it also shows jobs that have finished:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sacct -j 10 -X --format=JobID,JobName,State,ExitCode,NodeList</span></span><br><span class="line">JobID           JobName      State ExitCode        NodeList</span><br><span class="line">------------ ---------- ---------- -------- ---------------</span><br><span class="line">10                 wrap CANCELLED+      0:0              c1</span><br></pre></td></tr></table></figure>
+<p><code>CANCELLED+</code> is <code>CANCELLED by &lt;user id&gt;</code>, cut to fit the column; a <code>+</code> at the end of any <code>sacct</code> field means it was
+cut. <code>ExitCode 0:0</code> is the exit status, then the signal that ended the job.</p>
+<p><strong>Time limits are enforced.</strong> <code>-t 5</code> above asked for five minutes. A job that runs past its limit is killed. Here a
+job that sleeps 90 seconds was given one minute:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --<span class="keyword">time</span>=1 --wrap <span class="string">&#x27;sleep 90&#x27;</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sacct -j 11 -X --format=JobID,State,Elapsed,Timelimit</span></span><br><span class="line">JobID             State    Elapsed  Timelimit</span><br><span class="line">------------ ---------- ---------- ----------</span><br><span class="line">11              TIMEOUT   00:01:27   00:01:00</span><br></pre></td></tr></table></figure>
+<p>It ran 1 minute 27 seconds, not exactly one minute. The controller checks time limits about every 30 seconds, so a
+job can overrun by up to that much. It then sends the job SIGTERM, and SIGKILL <code>KillWait</code> seconds (10 here) later
+if the job is still alive; <code>sleep</code> exits at the first signal. On a real cluster the lesson is: ask for a little more time than you need, and save checkpoints, or
+a job that overruns loses its work.</p>
+<h2 id="4-Asking-for-GPUs">4. Asking for GPUs</h2>
+<p>A job asks for GPUs with <code>--gres=gpu:N</code>, meaning N GPUs on each of its nodes. Slurm tells the job’s processes
+which GPUs they got through <code>CUDA_VISIBLE_DEVICES</code>, the variable PyTorch and every CUDA program read:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">srun --gres=gpu:4 -N1 bash -c <span class="string">&#x27;echo &quot;$(hostname): CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES&quot;&#x27;</span></span></span><br><span class="line">c1: CUDA_VISIBLE_DEVICES=0,1,2,3</span><br></pre></td></tr></table></figure>
+<p>Ask for more than any node has, and Slurm refuses immediately instead of queueing a job that can never run:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">srun --gres=gpu:5 -N1 hostname</span></span><br><span class="line">srun: error: Unable to allocate resources: Requested node configuration is not available</span><br></pre></td></tr></table></figure>
+<p>GPUs are not shared between jobs. Two jobs that each want 3 GPUs on node <code>c1</code> (<code>-w c1</code> pins a job to a node)
+cannot run there together, because 3 + 3 is more than 4, so the second one waits. Two jobs that each want 2 GPUs
+fit, and run side by side:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --gres=gpu:3 -w c1 -t 2 --wrap <span class="string">&#x27;sleep 30&#x27;</span></span></span><br><span class="line">Submitted batch job 26</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --gres=gpu:3 -w c1 -t 2 --wrap <span class="string">&#x27;sleep 5&#x27;</span></span></span><br><span class="line">Submitted batch job 27</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">squeue -o <span class="string">&quot;%.8i %.8T %.6b %R&quot;</span></span></span><br><span class="line">   JOBID    STATE TRES_P NODELIST(REASON)</span><br><span class="line">      27  PENDING gres/g (Resources)</span><br><span class="line">      26  RUNNING gres/g c1</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">scancel 26 27</span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --gres=gpu:2 -w c1 -t 2 --wrap <span class="string">&#x27;sleep 30&#x27;</span></span></span><br><span class="line">Submitted batch job 28</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch --gres=gpu:2 -w c1 -t 2 --wrap <span class="string">&#x27;sleep 30&#x27;</span></span></span><br><span class="line">Submitted batch job 29</span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">squeue -o <span class="string">&quot;%.8i %.8T %.6b %R&quot;</span></span></span><br><span class="line">   JOBID    STATE TRES_P NODELIST(REASON)</span><br><span class="line">      28  RUNNING gres/g c1</span><br><span class="line">      29  RUNNING gres/g c1</span><br></pre></td></tr></table></figure>
+<p><code>(Resources)</code> in the reason column means the job is waiting because the resources it asked for are in use; it
+starts when they are released. This test needs the <code>DefMemPerCPU</code> line from section 2: without it, the first job
+reserves all of <code>c1</code>’s memory, and the second job waits for memory, whatever it asks of the GPUs.</p>
+<h2 id="5-Who-goes-first-priority">5. Who goes first: priority</h2>
+<p>When several jobs are waiting in the same partition, Slurm starts the one with the highest priority number first.
+(Two refinements: a partition with a higher <code>PriorityTier</code> goes before all others, and the backfill scheduler may
+start a smaller job early if that does not delay the job at the head of the line.) The number is a weighted
+sum of factors set in <code>slurm.conf</code>, such as how long the job has waited, how much the user has used recently, the
+job’s size and its partition. A user can lower their own job’s priority with <code>--nice</code>.</p>
+<p>To see it, I filled the cluster with one job, then queued two more that each need all four nodes: first one with
+<code>--nice=5000</code>, then one without:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">squeue -o <span class="string">&quot;%.8i %.10j %.8T %.10Q %.6p %r&quot;</span> --<span class="built_in">sort</span>=-p</span></span><br><span class="line">   JOBID       NAME    STATE   PRIORITY PRIORI REASON</span><br><span class="line">      12       wrap  RUNNING      11625 0.0000 None</span><br><span class="line">      14      nice0  PENDING      11625 0.0000 Resources</span><br><span class="line">      13   nice5000  PENDING       6625 0.0000 Priority</span><br></pre></td></tr></table></figure>
+<p>Job 14 was submitted later, but it is first in line: its priority is 11625 against 6625. The difference is exactly
+the 5000 that <code>--nice</code> subtracted. The reasons say it too: job 14 waits only for <code>Resources</code>, while job 13 waits for
+<code>Priority</code>, meaning a job ahead of it must start first. The <code>PRIORI</code> column is the same priority scaled to
+between 0 and 1, which rounds to zero at these values. <code>sprio -l</code> breaks each number into its factors, which is
+the place to look when you wonder why a job is not starting.</p>
+<h2 id="6-A-two-node-DDP-job">6. A two-node DDP job</h2>
+<p>This is the job the cluster was built for: PyTorch DistributedDataParallel (DDP) with four processes on each of
+two nodes, eight in total. On GPUs it would use the NCCL backend; here it uses gloo, PyTorch’s CPU backend. The
+way Slurm launches it is the same either way.</p>
+<p>The batch script:</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#!/bin/bash</span></span><br><span class="line"><span class="comment">#SBATCH --job-name=ddp-cpu</span></span><br><span class="line"><span class="comment">#SBATCH --nodes=2                 # two machines</span></span><br><span class="line"><span class="comment">#SBATCH --ntasks-per-node=4       # four processes on each: 8 ranks in total</span></span><br><span class="line"><span class="comment">#SBATCH --cpus-per-task=1</span></span><br><span class="line"><span class="comment">#SBATCH --gres=gpu:4              # four GPUs per node (one per process on a GPU cluster)</span></span><br><span class="line"><span class="comment">#SBATCH --time=00:10:00</span></span><br><span class="line"><span class="comment">#SBATCH --output=/shared/logs/%x-%j.out    # %x = job name, %j = job id</span></span><br><span class="line"></span><br><span class="line"><span class="built_in">export</span> MASTER_ADDR=$(scontrol show hostnames <span class="string">&quot;<span class="variable">$SLURM_JOB_NODELIST</span>&quot;</span> | <span class="built_in">head</span> -n 1)</span><br><span class="line"><span class="built_in">export</span> MASTER_PORT=29500</span><br><span class="line">srun /opt/venv/bin/python /home/lab/exercises/ddp_train.py --steps 200 --ckpt /shared/ckpt/ddp-cpu.pt</span><br></pre></td></tr></table></figure>
+<p>The scripts live in an <code>exercises/</code> directory on the host that compose mounts at <code>/home/lab/exercises</code> in every
+Slurm container, so every node sees the same files. Save the batch script there as <code>02-ddp.sbatch</code> and submit it
+from the controller with <code>sbatch /home/lab/exercises/02-ddp.sbatch</code>.</p>
+<p>Line by line:</p>
+<ul>
+<li>The <code>#SBATCH</code> lines are options to <code>sbatch</code>, written into the script so it is self-contained.</li>
+<li>The script itself runs once, on the first node of the job. <code>SLURM_JOB_NODELIST</code> holds the job’s nodes in the
+short form (<code>c[1-2]</code>); <code>scontrol show hostnames</code> expands it to one name per line, and the first name becomes
+<code>MASTER_ADDR</code>, the address where all ranks meet to set up communication.</li>
+<li><code>srun</code> then starts the eight processes, four on each node. It is Slurm’s launcher, so there is no <code>torchrun</code>
+here.</li>
+</ul>
+<p>Each process learns who it is from variables that <code>srun</code> sets: <code>SLURM_PROCID</code> is its rank (0 to 7),
+<code>SLURM_NTASKS</code> is the total (8). The training script turns them into what PyTorch expects:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rank = <span class="built_in">int</span>(os.environ[<span class="string">&#x27;SLURM_PROCID&#x27;</span>])</span><br><span class="line">world = <span class="built_in">int</span>(os.environ[<span class="string">&#x27;SLURM_NTASKS&#x27;</span>])</span><br><span class="line">dist.init_process_group(<span class="string">&#x27;gloo&#x27;</span>, init_method=<span class="string">&#x27;env://&#x27;</span>, rank=rank, world_size=world)</span><br></pre></td></tr></table></figure>
+<p><code>init_method='env://'</code> reads <code>MASTER_ADDR</code> and <code>MASTER_PORT</code> from the environment, which every process inherited
+from the batch script. The model is a small two-layer network on random data. Every 20 steps, rank 0 saves a
+checkpoint: it writes a temporary file and then renames it, so a crash in the middle of a save never leaves a
+half-written checkpoint behind. If a checkpoint exists when the script starts, it resumes from it; section 7 needs
+that. The whole script, <code>exercises/ddp_train.py</code>:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="string">&quot;&quot;&quot;Tiny DDP training on CPU with the gloo backend, launched by `srun` (one process per task).</span></span><br><span class="line"><span class="string">Rank and world size come from Slurm&#x27;s environment; MASTER_ADDR/MASTER_PORT from the sbatch script.</span></span><br><span class="line"><span class="string">Saves a checkpoint every --ckpt-every steps (rank 0, atomic rename) and resumes from it if present, so a requeued</span></span><br><span class="line"><span class="string">job continues where the last checkpoint left off (exercise 3).&quot;&quot;&quot;</span></span><br><span class="line"><span class="keyword">import</span> argparse, os, socket, time</span><br><span class="line"><span class="keyword">import</span> torch, torch.distributed <span class="keyword">as</span> dist, torch.nn <span class="keyword">as</span> nn</span><br><span class="line"></span><br><span class="line">p = argparse.ArgumentParser()</span><br><span class="line">p.add_argument(<span class="string">&#x27;--steps&#x27;</span>, <span class="built_in">type</span>=<span class="built_in">int</span>, default=<span class="number">200</span>)</span><br><span class="line">p.add_argument(<span class="string">&#x27;--ckpt&#x27;</span>, default=<span class="string">&#x27;/shared/ckpt/ddp.pt&#x27;</span>)</span><br><span class="line">p.add_argument(<span class="string">&#x27;--ckpt-every&#x27;</span>, <span class="built_in">type</span>=<span class="built_in">int</span>, default=<span class="number">20</span>)</span><br><span class="line">p.add_argument(<span class="string">&#x27;--step-seconds&#x27;</span>, <span class="built_in">type</span>=<span class="built_in">float</span>, default=<span class="number">0.0</span>, <span class="built_in">help</span>=<span class="string">&#x27;sleep per step, to make a job last long enough to kill&#x27;</span>)</span><br><span class="line">a = p.parse_args()</span><br><span class="line"></span><br><span class="line">rank = <span class="built_in">int</span>(os.environ[<span class="string">&#x27;SLURM_PROCID&#x27;</span>]); world = <span class="built_in">int</span>(os.environ[<span class="string">&#x27;SLURM_NTASKS&#x27;</span>]); local = <span class="built_in">int</span>(os.environ[<span class="string">&#x27;SLURM_LOCALID&#x27;</span>])</span><br><span class="line">os.environ.setdefault(<span class="string">&#x27;RANK&#x27;</span>, <span class="built_in">str</span>(rank)); os.environ.setdefault(<span class="string">&#x27;WORLD_SIZE&#x27;</span>, <span class="built_in">str</span>(world))</span><br><span class="line">dist.init_process_group(<span class="string">&#x27;gloo&#x27;</span>, init_method=<span class="string">&#x27;env://&#x27;</span>, rank=rank, world_size=world)</span><br><span class="line">torch.manual_seed(<span class="number">0</span>); torch.set_num_threads(<span class="number">1</span>)</span><br><span class="line">model = nn.Sequential(nn.Linear(<span class="number">32</span>, <span class="number">64</span>), nn.ReLU(), nn.Linear(<span class="number">64</span>, <span class="number">1</span>))</span><br><span class="line">ddp = nn.parallel.DistributedDataParallel(model)</span><br><span class="line">opt = torch.optim.SGD(ddp.parameters(), lr=<span class="number">0.05</span>)</span><br><span class="line">start = <span class="number">0</span></span><br><span class="line"><span class="keyword">if</span> os.path.exists(a.ckpt):</span><br><span class="line">    ck = torch.load(a.ckpt, map_location=<span class="string">&#x27;cpu&#x27;</span>)</span><br><span class="line">    ddp.module.load_state_dict(ck[<span class="string">&#x27;model&#x27;</span>]); opt.load_state_dict(ck[<span class="string">&#x27;opt&#x27;</span>]); start = ck[<span class="string">&#x27;step&#x27;</span>]</span><br><span class="line">    <span class="keyword">if</span> rank == <span class="number">0</span>: <span class="built_in">print</span>(<span class="string">f&#x27;resumed from <span class="subst">&#123;a.ckpt&#125;</span> at step <span class="subst">&#123;start&#125;</span>&#x27;</span>, flush=<span class="literal">True</span>)</span><br><span class="line"><span class="keyword">if</span> rank == <span class="number">0</span>:</span><br><span class="line">    <span class="built_in">print</span>(<span class="string">f&#x27;world <span class="subst">&#123;world&#125;</span> ranks; node <span class="subst">&#123;socket.gethostname()&#125;</span> rank <span class="subst">&#123;rank&#125;</span> local <span class="subst">&#123;local&#125;</span>; &#x27;</span></span><br><span class="line">          <span class="string">f&#x27;SLURM_JOB_ID <span class="subst">&#123;os.environ.get(<span class="string">&quot;SLURM_JOB_ID&quot;</span>)&#125;</span> restart <span class="subst">&#123;os.environ.get(<span class="string">&quot;SLURM_RESTART_COUNT&quot;</span>, <span class="string">&quot;0&quot;</span>)&#125;</span>; &#x27;</span></span><br><span class="line">          <span class="string">f&#x27;fake GPUs on this node: SLURM_GPUS_ON_NODE=<span class="subst">&#123;os.environ.get(<span class="string">&quot;SLURM_GPUS_ON_NODE&quot;</span>)&#125;</span>&#x27;</span>, flush=<span class="literal">True</span>)</span><br><span class="line">g = torch.Generator().manual_seed(<span class="number">1000</span> + rank)</span><br><span class="line"><span class="keyword">for</span> step <span class="keyword">in</span> <span class="built_in">range</span>(start, a.steps):</span><br><span class="line">    x = torch.randn(<span class="number">64</span>, <span class="number">32</span>, generator=g); y = (x.<span class="built_in">sum</span>(<span class="number">1</span>, keepdim=<span class="literal">True</span>) &gt; <span class="number">0</span>).<span class="built_in">float</span>()</span><br><span class="line">    loss = nn.functional.binary_cross_entropy_with_logits(ddp(x), y)</span><br><span class="line">    opt.zero_grad(); loss.backward(); opt.step()</span><br><span class="line">    <span class="keyword">if</span> a.step_seconds: time.sleep(a.step_seconds)</span><br><span class="line">    <span class="keyword">if</span> (step + <span class="number">1</span>) % a.ckpt_every == <span class="number">0</span>:</span><br><span class="line">        dist.barrier()</span><br><span class="line">        <span class="keyword">if</span> rank == <span class="number">0</span>:</span><br><span class="line">            tmp = a.ckpt + <span class="string">&#x27;.tmp&#x27;</span></span><br><span class="line">            torch.save(&#123;<span class="string">&#x27;model&#x27;</span>: ddp.module.state_dict(), <span class="string">&#x27;opt&#x27;</span>: opt.state_dict(), <span class="string">&#x27;step&#x27;</span>: step + <span class="number">1</span>&#125;, tmp)</span><br><span class="line">            os.replace(tmp, a.ckpt)</span><br><span class="line">            <span class="built_in">print</span>(<span class="string">f&#x27;step <span class="subst">&#123;step + <span class="number">1</span>&#125;</span>/<span class="subst">&#123;a.steps&#125;</span> loss <span class="subst">&#123;loss.item():<span class="number">.4</span>f&#125;</span> checkpoint saved&#x27;</span>, flush=<span class="literal">True</span>)</span><br><span class="line">dist.barrier()</span><br><span class="line"><span class="keyword">if</span> rank == <span class="number">0</span>: <span class="built_in">print</span>(<span class="string">&#x27;done&#x27;</span>, flush=<span class="literal">True</span>)</span><br><span class="line">dist.destroy_process_group()</span><br></pre></td></tr></table></figure>
+<p>The output file, with eight copies of a PyTorch warning about NumPy (which the image does not install) removed:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /shared/logs/ddp-cpu-19.out</span></span><br><span class="line">nodes: c[1-2]  master: c1  tasks: 8</span><br><span class="line">world 8 ranks; node c1 rank 0 local 0; SLURM_JOB_ID 19 restart 0; fake GPUs on this node: SLURM_GPUS_ON_NODE=4</span><br><span class="line">step 20/200 loss 0.6686 checkpoint saved</span><br><span class="line">...</span><br><span class="line">step 200/200 loss 0.2990 checkpoint saved</span><br><span class="line">done</span><br></pre></td></tr></table></figure>
+<h2 id="7-When-a-node-goes-away">7. When a node goes away</h2>
+<p>On a real cluster, nodes fail. When a node under a running batch job dies, Slurm can put the job back in the
+queue by itself. Whether it may is set per job with <code>--requeue</code> (or <code>--no-requeue</code>), and the cluster-wide default
+is <code>JobRequeue</code> in <code>slurm.conf</code> (1 here, so <code>--requeue</code> only makes it explicit). This applies to node failure and
+preemption, not to a job whose own program exits with an error; that job simply ends <code>FAILED</code>. Whether the job then continues or starts over depends on your training script: it continues only if
+the script saved checkpoints somewhere that outlives the node, and reads them on start. The script from section 6
+does both.</p>
+<p>The drill: the same job, slowed down to half a second per step and 600 steps long, submitted with <code>--requeue</code>.
+Once it has saved its second checkpoint (step 40), a script on the host runs <code>docker stop c2</code>, the job’s second
+node. A few seconds after Slurm marks the node as dead, it runs <code>docker start c2</code> again. This is what happened,
+in seconds from the moment the job was given its nodes:</p>
+<img src="/posts/slurm-cluster-in-docker/timeline.svg" class="" title="Node failure drill timeline " alt="docker stop at 24 s, c2 misses a ping at 48 s and is marked DOWN at 58 s, run 1 ends NODE_FAIL, the job waits 132 s in PENDING with Reason BeginTime, run 2 resumes at step 40 and completes at 478 s">
+<p>Step by step:</p>
+<ol>
+<li><strong>24 s: <code>c2</code> is stopped.</strong> The four processes on <code>c1</code> notice at once: their connections to the processes on
+<code>c2</code> close, and gloo stops them with <code>Connection closed by peer ... typically caused by a remote worker crashing</code>. In DDP every step needs every rank, so the job cannot go on without <code>c2</code>. But the job stays
+<code>RUNNING</code>: <code>srun</code> is still waiting for its four processes on <code>c2</code>, which it can no longer reach, and only
+Slurm’s node-failure handling will end them.</li>
+<li><strong>48 s and 58 s: the controller notices.</strong> The controller checks on its nodes regularly. Its check of <code>c2</code>
+fails at 48 s, and at 58 s, 34 s after the stop, it declares <code>c2</code> dead (<code>SlurmdTimeout=30</code>). In <code>sinfo</code> the
+node shows as <code>allocated*</code> in between (<code>*</code> means “not responding”) and then <code>down*</code>. The controller ends the
+job’s first run with the state <code>NODE_FAIL</code> and, because the job is requeueable, puts it back in the queue. <code>srun</code> prints <code>srun: error: Node failure on c2</code>.</li>
+<li><strong>61 s: <code>c2</code> is back.</strong> The container restarts, its <code>slurmd</code> registers again, and the controller returns it to
+service on its own.</li>
+<li><strong>58 s to 190 s: the job waits.</strong> The job sits in the queue for 132 s with the reason <code>BeginTime</code>, although
+all four nodes are free. This is deliberate: when Slurm requeues a batch job it sets an earliest start time of
+now plus one credential lifetime plus one second
+(<a target="_blank" rel="noopener" href="https://github.com/SchedMD/slurm/blob/slurm-23-11-4-1/src/slurmctld/job_mgr.c#L16466-L16477"><code>batch_requeue_fini</code></a>).
+A credential is the signed permission a node needs to start the job’s processes; waiting one lifetime means
+the credential of the failed run has expired everywhere before the new run starts. The lifetime is 120 s by
+default
+(<a target="_blank" rel="noopener" href="https://github.com/SchedMD/slurm/blob/slurm-23-11-4-1/src/interfaces/cred.h#L62"><code>DEFAULT_EXPIRATION_WINDOW</code></a>),
+so the job could start from 179 s, and the scheduler picked it up on its next pass, at 190 s. It can be
+shortened with <code>AuthInfo=cred_expire=&lt;seconds&gt;</code> in <code>slurm.conf</code>, down to 5 s
+(<a target="_blank" rel="noopener" href="https://github.com/SchedMD/slurm/blob/slurm-23-11-4-1/src/interfaces/cred.c#L116-L121">cred.c</a>).</li>
+<li><strong>190 s to 478 s: the second run.</strong> The job starts again on <code>c1</code> and <code>c2</code>. The training script finds the
+checkpoint and prints <code>resumed from /shared/ckpt/ddp-requeue.pt at step 40</code>; the job finishes at 478 s with
+state <code>COMPLETED</code>. Inside the second run, <code>SLURM_RESTART_COUNT</code> is 1, so a script can tell that it is a restart.</li>
+</ol>
+<p><code>sacct -D</code> (show every run of a job, not only the last) records both runs:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sacct -j 21 -D -X --format=JobID,State,Elapsed,NodeList,Start,End</span></span><br><span class="line">JobID             State    Elapsed        NodeList               Start                 End</span><br><span class="line">------------ ---------- ---------- --------------- ------------------- -------------------</span><br><span class="line">21            NODE_FAIL   00:00:59          c[1-2] 2026-10-20T14:46:14 2026-10-20T14:47:13</span><br><span class="line">21            COMPLETED   00:04:48          c[1-2] 2026-10-20T14:49:25 2026-10-20T14:54:13</span><br></pre></td></tr></table></figure>
+<p>What it cost: the steps since the last checkpoint, 34 s until Slurm declared the node dead, and the 132 s wait.
+Each has a setting: the checkpoint interval in your script, <code>SlurmdTimeout</code>, and the credential lifetime.</p>
+<p><code>docker stop</code> shuts a node down cleanly, which is why the surviving processes heard about it at once. A node that
+loses power or its network sends nothing, so the surviving processes get no closed connection to react to; that
+case is a different drill and is not covered here.</p>
+<h2 id="8-Preemption">8. Preemption</h2>
+<p>A partition can be allowed to push out jobs from another. Here <code>high</code> has a higher <code>PriorityTier</code> than <code>low</code>, and
+<code>low</code> has <code>PreemptMode=REQUEUE</code>:</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch -p low  -N 4 --exclusive --requeue --wrap <span class="string">&#x27;sleep 300&#x27;</span>   <span class="comment"># job 22 takes all four nodes</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">sbatch -p high -N 4 --exclusive --wrap <span class="string">&#x27;sleep 20&#x27;</span>              <span class="comment"># job 23</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">squeue -o <span class="string">&quot;%.8i %.6j %.5P %.9T %.6p %R&quot;</span></span></span><br><span class="line">   JOBID   NAME PARTI     STATE PRIORI NODELIST(REASON)</span><br><span class="line">      23   high  high   RUNNING 0.0000 c[1-4]</span><br><span class="line">      22    low   low   PENDING 0.0000 (BeginTime)</span><br></pre></td></tr></table></figure>
+<p>Job 22 was stopped and put back in the queue (<code>scontrol show job 22</code> shows <code>Restarts=1</code>), and job 23 took its
+nodes. Job 22 then waits with reason <code>BeginTime</code>, under the same rule as in
+section 7.</p>
+<h2 id="9-Pitfalls-when-running-Slurm-23-11-in-containers">9. Pitfalls when running Slurm 23.11 in containers</h2>
+<p>Each of these stopped the cluster from starting until I found it.</p>
+<ul>
+<li><strong>GPUs declared without device files are dropped.</strong> A <code>gres.conf</code> line that gives only a count
+(<code>Name=gpu Count=4</code>) is ignored by Slurm 23.11 with the log message “Ignoring file-less GPU”, and the node is
+then rejected because it reports 0 of its 4 GPUs. The fix is the <code>File=</code> line in section 2.</li>
+<li><strong><code>slurmd</code> needs a cgroup plugin it can load.</strong> Slurm 23.11 always loads one. The cgroup v2 plugin,
+<code>cgroup/v2</code>, needs dbus and a writable <code>/sys/fs/cgroup</code>, which an unprivileged container does not have, and the option to turn cgroups off only
+exists from Slurm 24.05. <code>CgroupPlugin=cgroup/v1</code> in <code>cgroup.conf</code> loads without touching anything, as long as
+no other setting uses cgroups: Slurm’s default process tracking, <code>proctrack/cgroup</code>, would, so <code>slurm.conf</code> sets
+<code>ProctrackType=proctrack/linuxproc</code> and <code>TaskPlugin=task/none</code>. The price of those two: a job is not confined
+to the cores and memory it asked for, only scheduled as if it were.</li>
+<li><strong>The controller looks up node addresses once, at start.</strong> Docker’s DNS only knows containers that are
+running, so if the controller starts before <code>c1</code> to <code>c4</code>, it never finds them. The controller’s start script
+waits until all four names resolve.</li>
+<li><strong>A job needs a writable directory to start in.</strong> By default a job writes its output to the directory it was
+submitted from. If the job’s user cannot write there, the job fails before it starts with exit code 53. Submit
+from a directory the job user owns, such as <code>/shared/logs</code> here.</li>
+</ul>
+<h2 id="10-Command-summary">10. Command summary</h2>
+<table>
+<thead>
+<tr>
+<th>command</th>
+<th>what it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sinfo</code>, <code>sinfo -N</code></td>
+<td>partitions and node states (<code>idle</code>, <code>allocated</code>, <code>down</code>; <code>*</code> = not responding)</td>
+</tr>
+<tr>
+<td><code>srun &lt;cmd&gt;</code></td>
+<td>run a command now on allocated nodes, output to the terminal</td>
+</tr>
+<tr>
+<td><code>sbatch script.sh</code></td>
+<td>queue a script; output to <code>slurm-&lt;id&gt;.out</code></td>
+</tr>
+<tr>
+<td><code>squeue</code></td>
+<td>the queue: running jobs and their nodes, waiting jobs and their reasons</td>
+</tr>
+<tr>
+<td><code>scancel &lt;id&gt;</code></td>
+<td>cancel a job</td>
+</tr>
+<tr>
+<td><code>sacct -j &lt;id&gt; -X</code></td>
+<td>a job’s history from the database (<code>-D</code> for every run of a requeued job)</td>
+</tr>
+<tr>
+<td><code>sprio -l</code></td>
+<td>why a waiting job has the priority it has</td>
+</tr>
+<tr>
+<td><code>scontrol show job &lt;id&gt;</code></td>
+<td>everything the controller knows about a job, including <code>Restarts</code></td>
+</tr>
+<tr>
+<td><code>scontrol show hostnames &lt;list&gt;</code></td>
+<td>expand <code>c[1-2]</code> into <code>c1</code>, <code>c2</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="Reproduce">Reproduce</h2>
+<p>Every file in this post is in <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/slurm-docker-lab">rockyshi-dev/slurm-docker-lab</a>:
+the Dockerfile, the compose file, the four configuration files and the exercise scripts, with a driver script.</p>
+<figure class="highlight console"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">git <span class="built_in">clone</span> https://github.com/rockyshi-dev/slurm-docker-lab &amp;&amp; <span class="built_in">cd</span> slurm-docker-lab</span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh up      <span class="comment"># munge key, build, start, wait for four idle nodes</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh ex1     <span class="comment"># sections 3-5: first jobs, GPUs, priority</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh ex2     <span class="comment"># section 6: two-node DDP</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh ex3     <span class="comment"># section 7: node failure drill</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh ex4     <span class="comment"># section 8: preemption</span></span></span><br><span class="line"><span class="meta prompt_">$ </span><span class="language-bash">./lab.sh down</span></span><br></pre></td></tr></table></figure>
+<p>The outputs above are from runs on 2026-10-20 (the drill in section 7 is job 21) and 2026-10-23 (section 4).
+A fresh clone of the repository, run from an empty data directory on 2026-10-23, gave the same results: the
+second 3-GPU job waited with <code>(Resources)</code> while two 2-GPU jobs ran together, the DDP job finished on <code>c[1-2]</code>,
+the drilled job was held with <code>Reason=BeginTime</code> for about two minutes and resumed from step 40, and the <code>low</code> job
+was requeued by the <code>high</code> one. Your job ids will differ from the ones shown: they count every job the cluster
+has run.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Slurm/" rel="tag"># Slurm</a>
+              <a href="/tags/distributed-training/" rel="tag"># distributed training</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/llm-gemm-kernels-on-rtx-4090/" rel="prev" title="LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap">
+                  <i class="fa fa-angle-left"></i> LLM-written GEMM kernels on an RTX 4090: none beats cuBLAS, and the reference has a trap
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
