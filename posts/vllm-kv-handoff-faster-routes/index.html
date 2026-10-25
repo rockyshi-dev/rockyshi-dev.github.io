@@ -20,19 +20,19 @@
 
 <script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
 
-    <meta name="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
+    <meta name="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (3.8-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has">
 <meta property="og:url" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/index.html">
 <meta property="og:site_name" content="Rocky Shi">
-<meta property="og:description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
+<meta property="og:description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (3.8-5.7 GB&#x2F;s); vLLM&#39;s Offloadi">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/routes.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/handoff.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/slope.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-faster-routes/bandwidth.svg">
 <meta property="article:published_time" content="2026-10-20T17:23:14.000Z">
-<meta property="article:modified_time" content="2026-10-20T17:23:14.554Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.970Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -212,7 +212,7 @@
 
     <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
       <meta itemprop="name" content="Faster KV-cache handoff without GPU peer-to-peer: what vLLM already has | Rocky Shi">
-      <meta itemprop="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB&#x2F;s); vLLM&#39;s OffloadingConnector reaches about 3 GB&#x2F;s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.">
+      <meta itemprop="description" content="Three existing routes can speed up vLLM&#39;s prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (3.8-5.7 GB&#x2F;s); vLLM&#39;s OffloadingConnector reaches about 3 GB&#x2F;s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.">
     </span>
       <header class="post-header">
         <h1 class="post-title" itemprop="name headline">
@@ -229,23 +229,34 @@
 
       <time title="Created: 2026-10-20 10:23:14" itemprop="dateCreated datePublished" datetime="2026-10-20T10:23:14-07:00">2026-10-20</time>
     </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+    </span>
 
   
 </div>
 
-            <div class="post-description">Three existing routes can speed up vLLM's prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (5.0-5.7 GB/s); vLLM's OffloadingConnector reaches about 3 GB/s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.</div>
+            <div class="post-description">Three existing routes can speed up vLLM's prefill-to-decode KV handoff on GPUs without peer-to-peer. An open pull request makes the host-buffer path 6 to 7 times faster (3.8-5.7 GB/s); vLLM's OffloadingConnector reaches about 3 GB/s; a UCX setting runs out of GPU memory. None reaches half of a plain pinned copy.</div>
         </div>
       </header>
 
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>In the <a href="/posts/vllm-kv-handoff-without-p2p/">previous post</a> I measured vLLM v0.30.0’s NIXL
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p><strong>Updated 2026-10-24.</strong> The headline range for PR #61056 is now the full range in the table
+(3.8-5.7 GB/s); the earlier 5.0-5.7 GB/s was its upper reading only. The setup also says why this
+post’s NixlConnector numbers differ slightly from the previous post’s.</p>
+</blockquote>
+<p>In the <a href="/posts/vllm-kv-handoff-without-p2p/">previous post</a> I measured vLLM v0.30.0’s NIXL
 connector handing a KV cache from a prefill GPU to a decode GPU on two RTX 4090s without
 peer-to-peer: 0.4 to 0.8 GB/s, under 7% of the 12.9 GB/s a plain pinned copy between the same two
 GPUs reaches. For a 28,672-token prompt that is two to three extra seconds before the first token.</p>
-<p>I had planned to write a faster handoff myself. Before writing any code I looked for routes that
-already exist, and found three that the first measurement had not covered:</p>
+<p>Three existing routes were not covered there:</p>
 <ul>
 <li><strong>a UCX setting</strong> that lets the transfer library pipeline a GPU-to-GPU read instead of
 emulating it over TCP;</li>
@@ -254,7 +265,7 @@ replaces the host-buffer path’s per-layer copy with one batched copy;</li>
 <li><strong>vLLM’s <code>OffloadingConnector</code></strong> with its P2P tier, which ships in v0.30.0 and stages the cache
 through pinned host memory with asynchronous copies.</li>
 </ul>
-<p>The short answer: the pull request is the fastest, at 5.0-5.7 GB/s, six to seven times the
+<p>The short answer: the pull request is the fastest, at 3.8-5.7 GB/s, six to seven times the
 host-buffer path it changes. The OffloadingConnector reaches about 3 GB/s. The UCX setting does not
 complete a long prompt: it runs out of GPU memory. None of them reaches half of the pinned copy.</p>
 <span id="more"></span>
@@ -268,20 +279,22 @@ complete a long prompt: it runs out of GPU memory. None of them reaches half of 
 <li>Prompts of 2,048, 8,192 and 28,672 tokens, 8 output tokens, 20 measured requests per length
 after warm-up.</li>
 <li><strong>Handoff cost</strong> = time to first token of the prefill/decode pair minus the time to first token
-of the same prompt on one GPU (median of the 20 requests). <strong>Handoff bandwidth</strong> = the KV bytes
+of the same prompt on one GPU (median of the 20 requests; the previous post used their mean,
+which is why its NixlConnector numbers differ slightly from the ones here). <strong>Handoff bandwidth</strong> = the KV bytes
 added between 8,192 and 28,672 tokens (1.17 GB) divided by the growth of that cost. I report it
 as a range: the upper end also subtracts the decode side’s own work, the lower end does not.</li>
 <li>Five rounds; in each round every configuration runs once, in a fresh random order, and a pinned
 copy between the two GPUs is measured at the start and the end.</li>
 </ul>
 <img src="/posts/vllm-kv-handoff-faster-routes/routes.svg" class="" title="The routes " alt="GPU 4 and GPU 5 with a host buffer for each instance between them. Host-buffer routes copy the cache down to the prefill buffer, move it host to host through NIXL over shared memory, and copy it up from the decode buffer. The default pull route reads GPU to GPU, emulated over TCP.">
-<p>Each changed configuration differs from its baseline in one thing:</p>
+<p>The UCX setting and the pull request each change one thing in a NixlConnector configuration; the
+OffloadingConnector is a different connector:</p>
 <table>
 <thead>
 <tr>
 <th>Route</th>
 <th>What changes</th>
-<th>Baseline</th>
+<th>Compared with</th>
 </tr>
 </thead>
 <tbody>
@@ -298,13 +311,13 @@ copy between the two GPUs is measured at the start and the end.</li>
 <tr>
 <td>OffloadingConnector</td>
 <td><code>OffloadingConnector</code> with a CPU tier of 8 GiB per instance and a <code>p2p</code> secondary tier, as in v0.30.0’s own P2P test</td>
-<td>none; read against the pinned copy</td>
+<td>the pinned copy (a different request flow)</td>
 </tr>
 </tbody>
 </table>
 <p>Before timing, I checked that each changed route actually took its new path. With PR #61056,
-NIXL 1.4.1 page-locks the host buffer when it registers it, so the batched copy ran: all 22 copies
-logged at the three prompt lengths were batched. With the OffloadingConnector, the decode server
+NIXL 1.4.1 page-locks the host buffer when it registers it, so the batched copy ran: its debug log showed
+the batched path for every copy at all three prompt lengths. With the OffloadingConnector, the decode server
 computed none of the prompt itself and loaded every token from the connector.</p>
 <h2 id="The-numbers">The numbers</h2>
 <img src="/posts/vllm-kv-handoff-faster-routes/handoff.svg" class="" title="Extra time to first token " alt="For a 28,672-token prompt: default pull 3.0 s, host buffer 2.1 s, OffloadingConnector 0.7 s, host buffer with PR 61056 0.5 s, against 0.13 s for a pinned copy of the same bytes.">
@@ -346,7 +359,8 @@ computed none of the prompt itself and loaded every token from the connector.</p
 </table>
 <p>Ranges are over the five rounds (and, for bandwidth, over the lower and upper reading). Every
 request moved exactly the expected number of KV bytes, and every configuration’s 8-token outputs
-matched single-GPU serving on 57 of 60 prompts (a cached single-GPU rerun matched on 58).</p>
+matched single-GPU serving on 57 of 60 prompts (the same prompts served again from the single
+GPU’s prefix cache matched on 58).</p>
 <img src="/posts/vllm-kv-handoff-faster-routes/slope.svg" class="" title="Cost against prompt length " alt="Extra time to first token at 2,048, 8,192 and 28,672 tokens per route. The default pull and the host buffer grow by about 2 and 1.5 seconds; the OffloadingConnector and PR 61056 grow by a few tenths of a second; a pinned copy by about a tenth.">
 <h2 id="The-pull-request-6-to-7-times-the-host-buffer-path">The pull request: 6 to 7 times the host-buffer path</h2>
 <p>The host-buffer configuration moves the cache in three legs: GPU to the prefill server’s host
@@ -364,7 +378,8 @@ the <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm
 instance, with asynchronous copies, and moves blocks between the two tiers through NIXL, here over
 shared memory. It handed off at 2.5 to 3.2 GB/s, four times the host-buffer configuration of the
 NIXL connector. Its request flow differs from the NIXL connector’s (its own proxy, an asynchronous
-copy down, 16-token offload blocks), so I read it against the pinned copy, not against PR #61056.</p>
+copy down, 16-token offload blocks), so the comparison with the NIXL routes is end to end, not a
+one-setting change.</p>
 <h2 id="The-UCX-setting-out-of-GPU-memory">The UCX setting: out of GPU memory</h2>
 <p><code>UCX_RMA_PPLN_ENABLE=y</code> turns on UCX’s rendezvous pipeline for remote reads, the path that could
 replace the TCP emulation. With it, the decode server completed the 2,048- and 8,192-token
@@ -373,8 +388,8 @@ prompts and failed during the first 28,672-token transfer:</p>
 <p>UCX allocates the pipeline’s fragment pool in 512 MiB chunks of <strong>GPU</strong> memory, not host memory.
 By the long prompt, GPU 5 held about 23.8 of its 24.6 GB, nearly all of it held by vLLM (weights, KV cache
 and workspace under its default memory budget), and the next chunk did not fit. NIXL reported the failure and vLLM failed
-the request. Making this route work means giving up GPU memory or changing where UCX puts its
-fragments, which is a different experiment; I report no bandwidth for it.</p>
+the request. Making this route work means giving vLLM less GPU memory or changing where UCX puts
+its fragments; I did not try either, so I report no bandwidth for it.</p>
 <img src="/posts/vllm-kv-handoff-faster-routes/bandwidth.svg" class="" title="Bandwidth against the pinned copy " alt="Handoff bandwidth ranges: default pull about 0.6, host buffer about 0.8, OffloadingConnector 2.5 to 3.2, PR 61056 3.8 to 5.7 GB&#x2F;s, against 12.9 GB&#x2F;s for the pinned copy and 6.4 for half of it.">
 <h2 id="What-this-means">What this means</h2>
 <p>On two PCIe GPUs without peer-to-peer, the cheapest improvement to vLLM v0.30.0’s prefill-to-decode
@@ -382,7 +397,7 @@ handoff is configuration: the OffloadingConnector’s P2P tier cuts the extra ti
 28,672 tokens from about 2 to 3 seconds to 0.7 seconds, with no code change. PR #61056, if merged,
 does better on the NIXL connector’s host buffer: 0.5 seconds. Neither reaches half of what a plain
 pinned copy between the same two GPUs moves (best: 0.44 of it), so a handoff that overlaps its legs
-still has room. The PR #61056 path would be the baseline for that.</p>
+still has room.</p>
 <p>Two side notes from the previous post: the push mode’s 30-second lease waits are a v0.30.0 bug,
 fixed in v0.31.0 by <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/58188">vllm#58188</a>; and the
 default pull configuration falling back to TCP emulation without any log line is now
@@ -390,7 +405,7 @@ default pull configuration falling back to TCP emulation without any log line is
 <p>These numbers hold for vLLM v0.30.0, NIXL 1.4.1 and driver 550 on this pair of RTX 4090s, at
 prompts of 2,048 to 28,672 tokens.</p>
 <h2 id="Reproduce">Reproduce</h2>
-<p>The measurement method and both NixlConnector baselines are in
+<p>The measurement method and the two NixlConnector configurations are in
 <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/kv-handoff-bench">rockyshi-dev/kv-handoff-bench</a>.</p>
 
     </div>

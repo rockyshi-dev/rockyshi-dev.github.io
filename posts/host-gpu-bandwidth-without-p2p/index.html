@@ -31,7 +31,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/host-gpu-bandwidth-without-p2p/bandwidth.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/host-gpu-bandwidth-without-p2p/kv-handoff.svg">
 <meta property="article:published_time" content="2026-10-11T05:01:21.000Z">
-<meta property="article:modified_time" content="2026-10-11T17:05:03.117Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.969Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -232,7 +232,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-11 10:05:03" itemprop="dateModified" datetime="2026-10-11T10:05:03-07:00">2026-10-11</time>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
     </span>
 
   
@@ -245,7 +245,13 @@
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>On a server with eight RTX 4090 cards, the GPUs cannot copy to each other directly. Every byte
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p><strong>Updated 2026-10-24.</strong> The KV-cache section now quotes the measured pinned copy from the
+<a href="/posts/vllm-kv-handoff-without-p2p/">next post</a> (12.74-12.89 GB/s) instead of an estimate from
+one-way rates that the published script does not measure, and a placement note that relied on
+those rates is removed.</p>
+</blockquote>
+<p>On a server with eight RTX 4090 cards, the GPUs cannot copy to each other directly. Every byte
 that one GPU sends to another, whether a KV cache moving from a prefill GPU to a decode GPU or a
 tensor-parallel all-reduce, goes down to host memory and back up. The bandwidth between host
 memory and the GPUs is therefore the budget for any multi-GPU serving on this machine, so I
@@ -333,21 +339,16 @@ but the measurement does not rule out other resources the four GPUs of a socket 
 <li><strong>Copying both ways at once does not double the bandwidth.</strong> One GPU alone moves 25 GB/s one
 way, but only 16.5 + 19.7 = 36 GB/s when it copies both ways. A whole socket moves the same
 36 GB/s in total.</li>
-<li><strong>Buffer placement did not matter for one GPU.</strong> In an earlier run on GPU 5, with some other
-GPUs busy, the buffer on the GPU’s own NUMA node, the CPU threads and the buffer both on the
-other socket, and only the CPU threads on the other socket all gave 25.3 GB/s host to device
-and 26.3 GB/s device to host.</li>
 </ol>
 <h2 id="What-this-means-for-moving-a-KV-cache">What this means for moving a KV cache</h2>
 <p>Without peer-to-peer, handing a KV cache from one GPU to another takes two copies: the first GPU
 copies it down to host memory, the second copies it up.</p>
 <img src="/posts/host-gpu-bandwidth-without-p2p/kv-handoff.svg" class="" title="KV-cache handoff " alt="The prefill GPU copies the KV cache to host memory over PCIe, and the decode GPU copies it back up, because the GPUs cannot copy to each other directly.">
-<p>A back-of-envelope estimate, not a measurement: if the two copies run one after the other at
-the single-GPU rates above (26.3 GB/s down, 25.3 GB/s up), the transfer runs at about
-1 / (1/26.3 + 1/25.3) = 12.9 GB/s. A 1 GiB KV cache then takes about 83 ms. Overlapping the
-two copies in chunks can do better, but point 3 is a warning against assuming each direction keeps
-its full one-way rate while the other is busy. What a real serving engine achieves is the next
-thing I am measuring.</p>
+<p>Measured in the <a href="/posts/vllm-kv-handoff-without-p2p/">next post</a>, a pinned copy from one GPU down
+to host memory and then up to another GPU, one after the other, runs at 12.74-12.89 GB/s, so a
+1 GiB KV cache takes about 84 ms. Overlapping the two copies in chunks can do better, but point 3
+is a warning against assuming each direction keeps its full one-way rate while the other is busy.
+That post also measures what vLLM itself achieves.</p>
 <h2 id="A-measurement-mistake-worth-sharing">A measurement mistake worth sharing</h2>
 <p>An earlier version of this benchmark reported 37 GB/s for two GPUs on one socket, and about
 38-41 GB/s for four. Both numbers should have been a warning on their own: they are more than one

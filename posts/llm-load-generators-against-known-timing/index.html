@@ -32,7 +32,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/lateness.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/ttft.svg">
 <meta property="article:published_time" content="2026-10-25T04:18:50.000Z">
-<meta property="article:modified_time" content="2026-10-25T04:18:50.309Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.970Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="LLM serving">
 <meta property="article:tag" content="measurement">
@@ -224,8 +224,9 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
+      
 
-      <time title="Created: 2026-10-24 21:18:50" itemprop="dateCreated datePublished" datetime="2026-10-24T21:18:50-07:00">2026-10-24</time>
+      <time title="Created: 2026-10-24 21:18:50 / Modified: 21:38:57" itemprop="dateCreated datePublished" datetime="2026-10-24T21:18:50-07:00">2026-10-24</time>
     </span>
 
   
@@ -302,7 +303,7 @@ the bench used at most 2% of those cores. Each tool runs at R = 10, 50, 200, 500
 per second for 60 s, three rounds, the tools in a fresh random order at every rate, the server
 restarted before every run.</p>
 <p>At 1000 requests per second the simulator itself is the limit: the probe’s TTFT p99 was 210.1 ms,
-then 222.8 ms on the retry, above the 210 ms I accept for a server that is not saturated. So 1000 is dropped for every tool,
+then 222.8 ms when repeated; above 210 ms the server itself is queueing. So 1000 is dropped for every tool,
 and the valid rates are 10, 50, 200 and 500.</p>
 <h2 id="Who-delivers-the-load">Who delivers the load</h2>
 <p>Two kinds of tool need two definitions of “delivered”. vLLM bench and inference-perf send a fixed
@@ -375,15 +376,19 @@ of the 30,000 planned, are never sent. That is the whole shortfall.</li>
 <p>So on this machine GuideLLM v0.8.0 with 24 worker processes cannot queue more than about 400
 requests per second, and the rest piles up and is dropped at the end.</p>
 <p><strong>inference-perf at 500</strong> sent and completed its requests on schedule: 29,998, 30,000 and 29,999
-completions within a first-to-last span of 59.9 to 60.1 s. Its log shows the load stage finished
-after about 62 s, then “Generating Reports…”, and nothing more until the bench stopped it, 180 s
-after its first completion. At 200 requests per second it wrote its report normally. So at 500 the load went out,
-but no numbers came back. The one or two missing requests in rounds 1 and 3 were never sent: a
+completions within a first-to-last span of 59.9 to 60.1 s. I stop any run that has not finished
+180 s after its first completion, and inference-perf had not: its log shows the load stage finished
+after about 62 s, then “Generating Reports…”, and nothing more. Its report takes time in
+proportion to the number of requests. From “Generating Reports…” to “Report saved” its own log
+shows 4.1-4.3 s for 600 requests, 17.7-17.9 s for 3,000 and 69.9-71.0 s for 12,000: about 6 ms
+per request. At that rate 30,000 requests need about three minutes, and only about two were left.
+So at 500 the load went out, but no numbers came back. The one or two missing requests in rounds 1 and 3 were never sent: a
 worker logged that it could not generate a prompt of exactly 100 tokens after 20 attempts.</p>
 <h2 id="Whose-numbers-to-trust">Whose numbers to trust</h2>
 <p>Each tool’s summary was checked two ways: against the tool’s own per-request data (completed
 count, achieved rate, TTFT and end-to-end p50 and p99), and against the server (TTFT and
-end-to-end p50 against the probe, the gap between tokens, 50 tokens per request).</p>
+end-to-end p50 against the probe, the gap between tokens, 50 tokens per request). That is ten
+checks per rate, 40 per tool over the four rates; the table counts them.</p>
 <table>
 <thead>
 <tr>
@@ -438,7 +443,7 @@ count, so it comes and goes between rounds: here it hit 3 of the 12 p50 cells at
 requests per second. The error is 0.24 to
 0.72 µs, because neighbouring samples are nearly equal; no one reading a latency would see it.</p>
 <p><strong>The tail is where the tool’s own time shows.</strong> All four tools’ TTFT and end-to-end p50 match the
-probe within the bench’s tolerance (10%). But the probe also gives the server’s TTFT p99, and
+probe’s to within 10%. But the probe also gives the server’s TTFT p99, and
 setting each tool’s reported p50 and p99 against the probe’s shows how much of the reported
 latency is the tool’s own:</p>
 <img src="/posts/llm-load-generators-against-known-timing/ttft.svg" class="" title="Reported TTFT minus the server" alt="s ">
@@ -458,8 +463,8 @@ what the server delivered, and nothing in the tool’s own output says so.</p>
 <p>While I was building this bench, the simulator’s <code>/metrics</code> endpoint sometimes answered
 HTTP 500 right after a client had closed streams mid-response: its streaming goroutine wrote to a
 request context that had already been handed back to the pool. I reported it as
-<a target="_blank" rel="noopener" href="https://github.com/llm-d/llm-d-inference-sim/issues/801">llm-d/llm-d-inference-sim#801</a>; the
-bench retries a failed counter read.</p>
+<a target="_blank" rel="noopener" href="https://github.com/llm-d/llm-d-inference-sim/issues/801">llm-d/llm-d-inference-sim#801</a>. Until
+it is fixed, a client reading <code>/metrics</code> under load should retry a failed read.</p>
 <h2 id="What-to-take-from-it">What to take from it</h2>
 <p>On one two-socket node, with a server that is never the bottleneck below 1000 requests per second:</p>
 <ul>
@@ -469,8 +474,8 @@ nearest-rank.</li>
 <li>At 500, vLLM bench and AIPerf still send the load. For latency at that rate, AIPerf’s numbers
 match the server; vLLM bench’s tail includes tens of milliseconds of its own.</li>
 <li>GuideLLM and inference-perf at 500 need a different configuration or a different tool:
-GuideLLM tops out near 400 requests per second, and inference-perf did not finish its report
-within 180 s.</li>
+GuideLLM tops out near 400 requests per second, and inference-perf’s report takes about 6 ms per
+request to write.</li>
 </ul>
 <h2 id="Reproduce">Reproduce</h2>
 <p>The bench is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/loadgen-truth-bench">rockyshi-dev/loadgen-truth-bench</a>.

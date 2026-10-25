@@ -29,7 +29,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://rockyshi.dev/posts/vllm-kv-handoff-without-p2p/handoff.svg">
 <meta property="article:published_time" content="2026-10-16T16:30:42.000Z">
-<meta property="article:modified_time" content="2026-10-17T05:33:54.806Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.971Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -223,9 +223,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-10-16 09:30:42 / Modified: 22:33:54" itemprop="dateCreated datePublished" datetime="2026-10-16T09:30:42-07:00">2026-10-16</time>
+      <time title="Created: 2026-10-16 09:30:42" itemprop="dateCreated datePublished" datetime="2026-10-16T09:30:42-07:00">2026-10-16</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
     </span>
 
   
@@ -243,15 +249,19 @@
 did not measure: <code>OffloadingConnector</code> with its P2P tier, which I have since measured at about
 3 GB/s on the same two GPUs; and the open pull request
 <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">vllm#61056</a> speeds up the host-buffer
-configuration measured here by 6 to 7x, to 5.0-5.7 GB/s
+configuration measured here by 6 to 7x, to 3.8-5.7 GB/s
 (<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056#issuecomment-6230143118">measurement</a>).
-The NIXL numbers below are unchanged, but “best shipped configuration” now reads “best
-NixlConnector configuration”. (2) The push-mode lease problem below is a known bug in
+The NIXL numbers below are unchanged; they describe the best NixlConnector configuration,
+not the best route vLLM ships. (2) The push-mode lease problem below is a known bug in
 v0.30.0, fixed by <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/58188">vllm#58188</a> in v0.31.0.</p>
+<p><strong>Updated 2026-10-24.</strong> The PR #61056 range now spans both readings defined below (3.8-5.7
+GB/s; 5.0-5.7 when the decode side’s own work is not counted), and the host-buffer section
+points to where the rest of its time goes.</p>
 </blockquote>
 <p>In the <a href="/posts/host-gpu-bandwidth-without-p2p/">previous post</a> I measured how fast data can move
 between host memory and the GPUs of an 8x RTX 4090 server that has no GPU peer-to-peer. A pinned
-copy from one GPU down to host memory and then up to another GPU runs at about 12.9 GB/s. That
+copy from one GPU down to host memory and then up to another GPU, measured here alongside every
+round, runs at 12.74-12.89 GB/s. That
 is the budget for handing a KV cache from a prefill GPU to a decode GPU on this machine.</p>
 <p>This post measures what vLLM actually gets. The answer: every configuration of vLLM v0.30.0’s
 default KV-cache connector moves the cache at <strong>0.4 to 0.8 GB/s</strong>, less than 7% of that budget. For a
@@ -334,7 +344,7 @@ time;</li>
 between 12.74 and 12.89 GB/s.</li>
 </ul>
 <h2 id="Results">Results</h2>
-<img src="/posts/vllm-kv-handoff-without-p2p/handoff.svg" class="" title="Extra time to first token " alt="For a 28,672-token prompt, the five shipped handoff configurations add between 2.08 and 3.71 seconds to the time to first token, while a pinned copy of the same 1.64 GB of KV cache down and back up takes 0.13 seconds.">
+<img src="/posts/vllm-kv-handoff-without-p2p/handoff.svg" class="" title="Extra time to first token " alt="For a 28,672-token prompt, the five NixlConnector handoff configurations add between 2.08 and 3.71 seconds to the time to first token, while a pinned copy of the same 1.64 GB of KV cache down and back up takes 0.13 seconds.">
 <table>
 <thead>
 <tr>
@@ -405,8 +415,9 @@ failure, and takes the same TCP path. It is a repeat of pull, not a GPU-direct m
 <li><strong>The host buffer</strong> moves the data between the two servers’ host memory with Linux cross
 memory attach (<code>cma</code>), not TCP. That step is fast: NIXL reports 1.64 GB moved in about 0.10
 seconds, about 16 GB/s. But it accounts for only about 5% of the extra 2.1 seconds. Most of
-the rest lies in steps this measurement does not time, such as copying the cache between each
-GPU and its host buffer.</li>
+the rest is the copy between each GPU and its host buffer, which v0.30.0 does layer by layer:
+in the <a href="/posts/vllm-kv-handoff-faster-routes/">follow-up post</a>, with that copy batched into one
+(vllm#61056), the extra time grows by 0.21 s instead of 1.44 s from 8,192 to 28,672 tokens.</li>
 <li><strong>Host buffer over TCP</strong> sends the host-to-host step through TCP as configured.</li>
 </ul>
 <p>Push shows one more thing. In push mode only, the prefill server logs “Releasing expired KV
@@ -436,14 +447,13 @@ long prompts slower to start, by seconds, and the reason is not PCIe. A plain pi
 host memory moves the same cache in about a tenth of a second, a factor of about 16 in
 bandwidth over the best NixlConnector configuration. Two faster routes exist: v0.30.0’s
 <code>OffloadingConnector</code> with its P2P tier (about 3 GB/s here) and the open pull request
-<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">vllm#61056</a> for the host buffer (5.0-5.7 GB/s
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/61056">vllm#61056</a> for the host buffer (3.8-5.7 GB/s
 here). Neither reaches half of the pinned copy.</p>
-<p>These numbers describe the v0.30.0 release; I will measure the main branch alongside any change
-of my own.</p>
+<p>These numbers describe the v0.30.0 release.</p>
 <h2 id="Reproduce">Reproduce</h2>
 <p>The benchmark, with every check above built in, is at
 <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/kv-handoff-bench">rockyshi-dev/kv-handoff-bench</a>. Its README has
-the exact commands for both parts and the numbers they give on this machine, round by round.</p>
+the exact commands for the two-GPU measurement and the four-pair run, and the numbers they give on this machine, round by round.</p>
 
     </div>
 

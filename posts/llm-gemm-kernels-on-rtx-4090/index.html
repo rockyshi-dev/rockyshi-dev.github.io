@@ -33,7 +33,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/bandwidth.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/llm-gemm-kernels-on-rtx-4090/splitk.svg">
 <meta property="article:published_time" content="2026-10-23T04:29:10.000Z">
-<meta property="article:modified_time" content="2026-10-23T04:29:10.047Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.970Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="CUDA">
 <meta property="article:tag" content="GPU">
@@ -229,6 +229,13 @@
 
       <time title="Created: 2026-10-22 21:29:10" itemprop="dateCreated datePublished" datetime="2026-10-22T21:29:10-07:00">2026-10-22</time>
     </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+    </span>
 
   
 </div>
@@ -306,7 +313,7 @@ report these <strong>wrappers</strong> separately.</li>
 <p>Five rounds, each running all 96 cells (32 solutions x 3 batch sizes). A solution would count as
 faster only with s above 1.05 in all five rounds. A round was accepted only if no other process
 used the GPU, other processes used at most 2% of each CPU socket, and the GPU clock stayed within
-3% of the first round’s. All five rounds passed on their first attempt.</p>
+3% of the first round’s.</p>
 <h2 id="What-happened-to-the-32-solutions">What happened to the 32 solutions</h2>
 <img src="/posts/llm-gemm-kernels-on-rtx-4090/outcomes.svg" class="" title="Outcomes " alt="Of 32 solutions: 7 do not compile, 1 compiles but cannot start, 1 gives wrong results, 4 are correct but cannot be captured in a CUDA graph, 19 are correct and capturable (16 own kernels and 3 wrappers).">
 <ul>
@@ -320,7 +327,8 @@ as <code>COMPILE_ERROR</code> on B200.</li>
 <li><strong>One gives wrong results</strong> at every batch size, as it does in FlashInfer-Bench’s B200 traces.</li>
 <li><strong>Four are correct but cannot be captured</strong> in a CUDA graph: two create a cuBLAS handle or
 cuBLASLt descriptors on every call, and two call <code>torch.cuda.synchronize()</code> inside the kernel
-call. One of the latter also took more than 10 minutes to compile from a cold cache.</li>
+call. One of the latter ran past the 600-second compile limit from an empty Triton cache in the
+first two rounds, and compiled in the last three from the cache those rounds left.</li>
 <li><strong>Nineteen are correct and capturable</strong>: 16 own kernels and 3 wrappers.</li>
 </ul>
 <h2 id="None-is-faster">None is faster</h2>
@@ -352,7 +360,8 @@ call. One of the latter also took more than 10 minutes to compile from a cold ca
 </tbody>
 </table>
 <p>Values are five-round medians of s for own kernels that are correct and capturable (at M = 32 on
-the first two shapes their correctness entries are withdrawn; see the last section). The highest
+the first two shapes these kernels are counted as neither correct nor incorrect; see “The trap in
+the reference”). The highest
 single-round s of any cell, of any kind, is 1.016, and that is a wrapper calling cuBLAS. The
 wrappers that run the same cuBLAS kernel measure 1.000, which also shows that the solution’s slot in
 the timing loop carries no penalty of its own.</p>
@@ -392,15 +401,13 @@ describe the flag and its cost in precision, and a maintainer explains the trade
 <a target="_blank" rel="noopener" href="https://github.com/pytorch/pytorch/issues/116870">pytorch/pytorch#116870</a>. What it does to a
 kernel benchmark is less obvious: if <code>F.linear</code> with default settings is the correctness reference,
 a correct kernel can be marked incorrect at exactly the decode batch sizes where cuBLAS switches to
-split-K. In this audit I withdrew those nine correctness entries rather than counting them either
-way; every one of the nine was 0.17x to 0.79x of cuBLAS, so the conclusion does not depend on them.
+split-K. In this audit I count those nine as neither correct nor incorrect; every one of the nine was 0.17x to 0.79x of cuBLAS, so the conclusion does not depend on them.
 For a benchmark: set the flag to False for the reference, or compare against a float64 product.</p>
 <p>These numbers hold for the 32 fp16 GEMM solutions of FlashInfer-Trace at <code>da915083</code>, on an RTX
 4090 with PyTorch 2.13 and its bundled cuBLAS, at M = 1, 8 and 32.</p>
 <h2 id="Reproduce">Reproduce</h2>
 <p>The audit is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/gen-kernel-audit">rockyshi-dev/gen-kernel-audit</a>.
-A second, independent run of that repository on the same machine reproduced every outcome and
-speedup above, including the withdrawn entries.</p>
+Its README has the commands for every step above.</p>
 
     </div>
 

@@ -33,7 +33,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/ttft-c8.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/timesplit.svg">
 <meta property="article:published_time" content="2026-10-17T20:12:07.000Z">
-<meta property="article:modified_time" content="2026-10-17T20:12:08.005Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.970Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -145,7 +145,7 @@
       <div class="sidebar-panel-container">
         <!--noindex-->
         <div class="post-toc-wrap sidebar-panel">
-            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-answer"><span class="nav-number">1.</span> <span class="nav-text">The answer</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#What-vLLM%E2%80%99s-documentation-says-and-how-this-bears-on-it"><span class="nav-number">1.1.</span> <span class="nav-text">What vLLM’s documentation says, and how this bears on it</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Two-things-to-read-with-the-table"><span class="nav-number">1.2.</span> <span class="nav-text">Two things to read with the table</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#How-it-was-measured"><span class="nav-number">2.</span> <span class="nav-text">How it was measured</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#The-output-check-and-why-it-first-lied"><span class="nav-number">2.1.</span> <span class="nav-text">The output check, and why it first lied</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-the-time-goes-at-c-1"><span class="nav-number">3.</span> <span class="nav-text">Where the time goes at c &#x3D; 1</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-I-expected-and-what-came-out"><span class="nav-number">4.</span> <span class="nav-text">What I expected, and what came out</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scope"><span class="nav-number">5.</span> <span class="nav-text">Scope</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-answer"><span class="nav-number">1.</span> <span class="nav-text">The answer</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#What-vLLM%E2%80%99s-documentation-says-and-how-this-bears-on-it"><span class="nav-number">1.1.</span> <span class="nav-text">What vLLM’s documentation says, and how this bears on it</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Two-things-to-read-with-the-table"><span class="nav-number">1.2.</span> <span class="nav-text">Two things to read with the table</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#How-it-was-measured"><span class="nav-number">2.</span> <span class="nav-text">How it was measured</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#The-output-check-and-a-sampler-pitfall"><span class="nav-number">2.1.</span> <span class="nav-text">The output check, and a sampler pitfall</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-the-time-goes-at-c-1"><span class="nav-number">3.</span> <span class="nav-text">Where the time goes at c &#x3D; 1</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-I-expected-and-what-came-out"><span class="nav-number">4.</span> <span class="nav-text">What I expected, and what came out</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scope"><span class="nav-number">5.</span> <span class="nav-text">Scope</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
         </div>
         <!--/noindex-->
 
@@ -227,9 +227,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-10-17 13:12:07 / Modified: 13:12:08" itemprop="dateCreated datePublished" datetime="2026-10-17T13:12:07-07:00">2026-10-17</time>
+      <time title="Created: 2026-10-17 13:12:07" itemprop="dateCreated datePublished" datetime="2026-10-17T13:12:07-07:00">2026-10-17</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
     </span>
 
   
@@ -380,16 +386,16 @@
 <p><strong>Gates.</strong> A cell counted only if every gate held in that round:</p>
 <ul>
 <li><strong>Equal KV capacity</strong>: 58,976 tokens in every arm, and the preemption counter did not move.</li>
-<li><strong>Quiet host</strong>: no foreign process on any card, and foreign CPU time at most 2% of each socket. The first attempt at round 1 failed this gate: someone else’s job used 17-28% of a socket. That attempt was rerun. In the accepted rounds foreign CPU stayed at or below 0.44%.</li>
-<li><strong>Placement</strong>: every worker’s CPU list and memory node matched what was declared.</li>
+<li><strong>Quiet host</strong>: no foreign process on any card, and foreign CPU time at most 2% of each socket. In the accepted rounds foreign CPU stayed at or below 0.44%.</li>
+<li><strong>Placement</strong>: every worker’s CPU list and memory node were those of its GPU’s socket.</li>
 <li><strong>Transport</strong>: every NCCL channel went through host shared memory, none through P2P or the network.</li>
 <li><strong>Clean requests</strong>: 1,536 tokens in and 128 out for every request, every request arriving as 128 separate chunks, and no prefix-cache hits.</li>
 </ul>
 <p>All 45 accepted cells (3 arms x 3 loads x 5 rounds) passed every gate.</p>
-<h3 id="The-output-check-and-why-it-first-lied">The output check, and why it first lied</h3>
+<h3 id="The-output-check-and-a-sampler-pitfall">The output check, and a sampler pitfall</h3>
 <p>vLLM issue <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/issues/40725">#40725</a> reports TP4 output corruption on PCIe consumer cards in an older release, so I checked that the three splits produce the same text. Before timing, each arm answered 35 prompts (the 30 c = 1 prompts and 5 non-English ones), one at a time, with temperature 0 and the top-5 logprobs at every position. For each pair of arms, I found the first position where they chose different tokens. A difference was benign if each arm’s token sat in the other’s top 5 and the two arms’ choices were less than 1.0 nat apart in logprob. Anything else was called corruption.</p>
-<p>The first run of this check excluded all three arms for corruption. That turned out to be an artefact of the check itself. The requests left <code>repetition_penalty</code> unset, so the model’s own default of 1.05 applied. vLLM’s sampler takes its argmax over the penalised logits, but the logprobs it returns are raw. The check assumed the emitted token was the argmax of the logprobs it read, and under the penalty that was false: each arm emitted 204-215 of its 4,480 tokens below its own top raw logprob. All 25 “corruption” cases were tokens that one arm rejected because they had already appeared in the prompt or the output.</p>
-<p>The fix was one field: <code>repetition_penalty: 1.0</code> on the check’s requests only, so the emitted token is the argmax of the logprobs returned. I also added a premise test that verifies this, position by position, before the check is read. On the rerun the premise held at every one of 3 x 4,480 positions. Per pair of arms, 15-21 of the 35 prompts were identical, and every other difference was benign, with first-difference margins of at most 0.25 nat. No arm was excluded. The timed runs kept the model’s default sampling settings, identical in all arms.</p>
+<p>Run as first written, this check flags all three arms as corrupt, and the cause is the check itself. The requests left <code>repetition_penalty</code> unset, so the model’s own default of 1.05 applied. vLLM’s sampler takes its argmax over the penalised logits, but the logprobs it returns are raw. The check assumed the emitted token was the argmax of the logprobs it read, and under the penalty that was false: each arm emitted 204-215 of its 4,480 tokens below its own top raw logprob. All 25 “corruption” cases were tokens that one arm rejected because they had already appeared in the prompt or the output.</p>
+<p>The fix was one field: <code>repetition_penalty: 1.0</code> on the check’s requests only, so the emitted token is the argmax of the logprobs returned. I also added a premise test that verifies this, position by position, before the check is read. With the fix, the premise held at every one of 3 x 4,480 positions. Per pair of arms, 15-21 of the 35 prompts were identical, and every other difference was benign, with first-difference margins of at most 0.25 nat. No arm was excluded. The timed runs kept the model’s default sampling settings, identical in all arms.</p>
 <p>The lesson: an equality check is only as good as its assumption about what the sampler did. Test that assumption first, and treat the comparison as unreadable if it fails. A gate that fires on its own instrument looks exactly like a gate that caught a real bug.</p>
 <h2 id="Where-the-time-goes-at-c-1">Where the time goes at c = 1</h2>
 <p>To explain the c = 1 results, I traced one 1,536-token prefill and 20 decode steps per arm with Nsight Systems. The traced windows reproduce the timed numbers. Decode steps took 27.9 / 44.7 / 152.5 ms (TP8 / TP4xPP2 / PP8), against token gaps of 27.7 / 44.5 / 152.3 ms. Prefill windows took 1.75 / 1.74-1.77 / 1.34-1.42 s, against TTFTs of 1.78 / 1.80 / 1.44 s.</p>
@@ -444,18 +450,18 @@
 </table>
 <img src="/posts/tp-pp-72b-without-p2p/timesplit.svg" class="" title="Where the time goes at c &#x3D; 1 " alt="Stacked bars per split for one prefill and one decode step: TP8 spends most of its prefill in all-reduce; the pipeline splits spend most of their time waiting for the upstream stage.">
 <ul>
-<li><strong>Why PP8 has the lower TTFT.</strong> PP8’s prefill is eight stages of about 175 ms, run one after another, plus seven hops of about 2 ms. TP8 computes for only 188 ms but spends 1.56 s in all-reduce. That all-reduce time matches a separate measurement on this node: an 8-rank all-reduce of 24 MiB ran at 4.45 GB/s, which predicts 1.59 s for this prefill. TP4xPP2 sits between: each stage computes for about 180 ms and spends about 0.70 s in 4-rank all-reduce.</li>
+<li><strong>Why PP8 has the lower TTFT.</strong> PP8’s prefill is eight stages of about 175 ms, run one after another, plus seven hops of about 2 ms. TP8 computes for only 188 ms but spends 1.56 s in all-reduce. That all-reduce time matches <a href="/posts/nccl-collectives-without-p2p/">the NCCL measurement on this node</a>: an 8-rank all-reduce of 24 MiB runs at 4.45 GB/s of bus bandwidth, which predicts 1.59 s for this prefill. TP4xPP2 sits between: each stage computes for about 180 ms and spends about 0.70 s in 4-rank all-reduce.</li>
 <li><strong>Why TP8 has the shortest token gap at c = 1.</strong> In TP8, each GPU reads its share of the weights once per token: 22.4 ms of compute plus 5.2 ms of all-reduce. In TP4xPP2 that happens twice in series (2 x about 20.5 ms + 2 x 1.6 ms), and in PP8 eight times in series (8 x 18.7 ms). The hops cost microseconds.</li>
 <li><strong>Waiting.</strong> In the pipeline arms most of each GPU’s window is spent waiting for its upstream stage. In PP8 decode that is 2.67 s of each GPU’s 3.05 s. At c = 1 this is the pipeline’s serial structure, not communication cost.</li>
 </ul>
-<p>TP8’s prefill is the only place where communication dominates: NCCL kernels take 89% of its prefill-step GPU time. Its all-reduce reaches about 4.6 GB/s of bus bandwidth. That figure is not directly comparable with the roughly 25 GB/s one socket moves from host to GPU in a plain copy (<a href="/posts/host-gpu-bandwidth-without-p2p/">the first post</a>): a host-staged ring all-reduce makes several copies per byte and crosses the socket boundary. The trace does not show how the time splits among those steps. A host-staged all-reduce for more than two cards is therefore a candidate for a separate project.</p>
-<p>The trace covers c = 1 only. It does not explain TP4xPP2’s throughput win at c = 8, or the TP8 / TP4xPP2 tie on token gap at c = 32. Those two results are unexplained.</p>
+<p>TP8’s prefill is the only place where communication dominates: NCCL kernels take 89% of its prefill-step GPU time. Its all-reduce reaches about 4.6 GB/s of bus bandwidth. That figure is not directly comparable with the roughly 25 GB/s one socket moves from host to GPU in a plain copy (<a href="/posts/host-gpu-bandwidth-without-p2p/">the first post</a>): a host-staged ring all-reduce makes several copies per byte and crosses the socket boundary. The trace does not show how the time splits among those steps.</p>
+<p>The trace covers c = 1 only, so it does not show why TP4xPP2 wins throughput at c = 8 or why TP8 and TP4xPP2 tie on token gap at c = 32; that needs a trace at those loads.</p>
 <h2 id="What-I-expected-and-what-came-out">What I expected, and what came out</h2>
-<p>Before the run I wrote down an expectation that could be wrong. I expected PP8 to win throughput at both c = 8 and c = 32, and the hybrid to land between the pure splits on every metric. The TTFT and token-gap predictions held. The throughput prediction failed at c = 8, where TP8 beat PP8. The hybrid prediction failed too: TP4xPP2 is the outright throughput winner at c = 8. Both surprises went to a separate review before this was written. It recomputed every value and verdict from the per-request records and found them equal to mine.</p>
+<p>Before the run I wrote down an expectation that could be wrong. I expected PP8 to win throughput at both c = 8 and c = 32, and the hybrid to land between the pure splits on every metric. The TTFT and token-gap predictions held. The throughput prediction failed at c = 8, where TP8 beat PP8. The hybrid prediction failed too: TP4xPP2 is the outright throughput winner at c = 8.</p>
 <h2 id="Scope">Scope</h2>
 <p>Every number here holds for 1,536 prompt tokens to 128 output tokens with fixed output length, bf16 weights, and this node: eight RTX 4090s on PCIe 4.0 without peer-to-peer on the stock driver, across two CPU sockets, running vLLM v0.30.0 with default settings apart from the pinned KV pool and the NUMA binding.</p>
 <h2 id="Reproduce">Reproduce</h2>
-<p>The benchmark is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/tp-pp-72b-bench">rockyshi-dev/tp-pp-72b-bench</a>. The harness starts each arm, runs the closed-loop client, checks every gate from the raw records, and computes the five-round verdicts from per-request timestamps. Its README has the exact commands. A second, independent run of that repository on the same machine reproduced Table A and Table B and every verdict above.</p>
+<p>The benchmark is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/tp-pp-72b-bench">rockyshi-dev/tp-pp-72b-bench</a>. The harness starts each arm, runs the closed-loop client, checks every gate from the raw records, and computes the five-round verdicts from per-request timestamps. Its README has the exact commands.</p>
 
     </div>
 

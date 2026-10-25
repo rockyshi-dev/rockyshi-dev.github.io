@@ -31,7 +31,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/nccl-collectives-without-p2p/bandwidth.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/nccl-collectives-without-p2p/account.svg">
 <meta property="article:published_time" content="2026-10-20T06:18:41.000Z">
-<meta property="article:modified_time" content="2026-10-20T06:18:41.231Z">
+<meta property="article:modified_time" content="2026-10-25T04:38:57.970Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="GPU">
 <meta property="article:tag" content="LLM serving">
@@ -228,6 +228,13 @@
 
       <time title="Created: 2026-10-19 23:18:41" itemprop="dateCreated datePublished" datetime="2026-10-19T23:18:41-07:00">2026-10-19</time>
     </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+    </span>
 
   
 </div>
@@ -288,7 +295,7 @@
 </table>
 <p>The operations are the ones vLLM v0.30.0 issues on such cards: its <code>PyNcclCommunicator.all_reduce</code> (the custom all-reduce and symmetric-memory paths switch themselves off without peer-to-peer), its all-gather for the logits, and <code>torch.distributed</code> send/receive on an NCCL group for pipeline hops. All-reduce sizes run from 4 KiB to 256 MiB, with the sizes a Qwen2.5-32B decode step issues at batch 1, 8, 32, 64 and 256 (10, 80, 320, 640 KiB, 2.5 MiB), the 15 and 24 MiB all-reduces of a 1,536-token prompt for the 32B and 72B models, and a 20 MiB prefill chunk. All-reduces run eagerly at every size and inside a CUDA graph up to 4 MiB, which is how vLLM runs them in decode.</p>
 <p>Each cell is 10 warm-up batches, then 20 timed batches of M back-to-back calls between CUDA events, with M chosen so that a batch lasts at least 2 ms and the ranks aligned by a 4-byte all-reduce before each batch. The batch time is the slowest rank’s; the round value is the median of the 20 batches. Bus bandwidth follows the nccl-tests definition: for all-reduce, bytes per second times 2(n-1)/n. Every set gets a fresh launch of its rank processes, so fresh NCCL communicators, and the five sets run in a random order in each of five rounds. In the same rounds, before the collectives, the same GPU sets copy to and from host memory at the same time, which gives each set’s share of its socket path for comparison (the method of the first post, now with a 99% window-overlap check on every cell).</p>
-<p>NCCL is 2.29.7, the one in vLLM’s wheel, with every setting at its default. A transport check with <code>NCCL_DEBUG=INFO</code> ran once for every shape: all 14 of them report <code>via SHM/direct/direct</code> for every connection and no <code>P2P</code> or <code>NET</code> line, and the staging buffers are mmap-allocated host memory (216 such lines, no CUDA-memory ones). At 64 MiB and above every set uses the ring algorithm with the simple protocol on two channels, so the large-message ratios below compare like with like.</p>
+<p>NCCL is 2.29.7, the one in vLLM’s wheel, with every setting at its default. A transport check with <code>NCCL_DEBUG=INFO</code> ran once for every configuration measured: every connection reports <code>via SHM/direct/direct</code>, none <code>P2P</code> or <code>NET</code>, and every staging buffer is mmap-allocated host memory. At 64 MiB and above every set uses the ring algorithm with the simple protocol on two channels, so the large-message ratios below compare like with like.</p>
 <h2 id="The-map">The map</h2>
 <img src="/posts/nccl-collectives-without-p2p/bandwidth.svg" class="" title="Bus bandwidth by message size " alt="Three panels. Left: all-reduce bus bandwidth against message size for the five sets, flat from about 8 MiB upward at 12.4, 8.5, 7.5, 4.5 and 4.4 GB&#x2F;s. Middle: send and receive bandwidth for S2a and X2, equal up to 320 KiB, X2 pulling ahead to 19.9 against 16.6 GB&#x2F;s from 8 MiB. Right: per-call time of a graph-captured all-reduce at the decode sizes, 10 to 40 microseconds at 10 KiB depending on the set.">
 <p>Large-message bus bandwidth <strong>L</strong>, the median of the values at 64, 128 and 256 MiB, per set and round, with the per-card copy share from the concurrent calibration of the same round:</p>
@@ -425,7 +432,7 @@
 </tbody>
 </table>
 <p>The copy ratios k1 and k2 say the path model is right about copies: four cards on one socket get 2% more than one card, two cards on two sockets get exactly twice. The collective ratios c2, c3 and c4 say the same about all-reduce, and c1 says it less sharply: two cards across sockets get 1.65 times the bandwidth of two cards on one socket, not 2, because X2 reaches only 76% of its copy share where every other set reaches 83-97%.</p>
-<p>The seventh prediction concerned a one-directional send from rank 0 to rank 1. Within a socket (S2a) the bytes go up the socket-0 path and back down it; across sockets (X2) they go up socket 0’s path and down socket 1’s. PCIe is full duplex, so I predicted the same rate, within 15%. Measured: 16.6 GB/s within a socket, 19.9 GB/s across, a ratio of 1.19 to 1.21 in every round. That is neither the hold range nor the fail range, so the account is <strong>unstable</strong> by the rule I set, and this post reports the map without claiming the account.</p>
+<p>The seventh prediction concerned a one-directional send from rank 0 to rank 1. Within a socket (S2a) the bytes go up the socket-0 path and back down it; across sockets (X2) they go up socket 0’s path and down socket 1’s. PCIe is full duplex, so I predicted the same rate, within 15%. Measured: 16.6 GB/s within a socket, 19.9 GB/s across, a ratio of 1.19 to 1.21 in every round. That is in neither the hold range nor the fail range, so this prediction is unresolved, and the post reports the map without claiming the account.</p>
 <p>What the data does say about that gap: the premise “full duplex is free” is contradicted by the calibration itself. One card copying both ways at once gets 16.3 + 19.8 GB/s, not 25 + 25, and two cards on one socket get 17.9 + 18.7. A one-directional send through host memory loads the shared path both ways, up from the sender and down to the receiver, and 16.6 GB/s is 93% of that two-way rate. The gap also appears only where bandwidth matters: X2 and S2a sends are equal (ratio 0.98-1.00) from 4 KiB to 320 KiB, where a send costs a flat 32-34 µs whatever its size, 3-8% apart from 512 KiB to 4 MiB, and 20% apart from 8 MiB up. Why the cross-socket send stops at 19.9 GB/s rather than at the 25 GB/s a single card’s one-way copy reaches is unexplained by this measurement.</p>
 <h2 id="Small-messages-what-a-decode-step-pays">Small messages: what a decode step pays</h2>
 <p>For decode, vLLM captures the all-reduce in a CUDA graph. Per-call time of the graph-captured all-reduce at the Qwen2.5-32B decode sizes (batch × 5,120 × 2 bytes), median over rounds:</p>
@@ -475,7 +482,7 @@
 </tr>
 </tbody>
 </table>
-<p>At batch 1 the call is latency-bound and grows with the number of cards (two cards 10 µs, four 19-21 µs, eight 40 µs; NCCL uses its low-latency protocol there). From 80 KiB upward the socket-path order of the map takes over: X2 beats S2a and X4 beats S4a. Eager calls at these sizes cost 0.5-2 µs more than graph replays, so the graph saves almost nothing per call here; its value in vLLM is elsewhere.</p>
+<p>At batch 1 the call is latency-bound and grows with the number of cards (two cards 10 µs, four 19-21 µs, eight 40 µs; NCCL uses its low-latency protocol there). From 80 KiB upward the socket-path order of the map takes over: X2 beats S2a and X4 beats S4a. Eager calls at these sizes cost 0.5-2 µs more than graph replays, so the graph saves almost nothing per call here.</p>
 <p>The logits all-gather, which vLLM runs outside the graph, costs 75 µs on four cards and 94 µs on eight at batch 1 (297 KiB), and 1.8 / 2.0 ms at batch 32.</p>
 <h2 id="What-this-means-for-tensor-parallelism">What this means for tensor parallelism</h2>
 <p>From the map, the communication a tensor-parallel forward pass pays per token and per prompt, using vLLM’s counts (2L+1 all-reduces per step, one logits all-gather):</p>
@@ -503,11 +510,11 @@
 </tr>
 </tbody>
 </table>
-<p>Against the break-even I derived from public peak numbers before the run (tensor parallelism stops winning on the token gap when its communication reaches (n-1) memory-bound steps, about 49 ms for the 32B model on four cards and 126 ms for the 72B on eight; on prompts when it reaches (n-1) compute times, about 0.46 s and 1.18 s), the decode numbers are well below the line at both batch sizes, and the prompt numbers are above it for the 32B model and in the undecided middle for the 72B. The 72B post measured the whole thing rather than its communication, and found exactly that ordering: TP8 had the shortest gap between tokens, and PP8 the fastest first token.</p>
-<p>One number for the 72B post’s own arithmetic: the 24 MiB all-reduce on eight cards runs at 4.45 GB/s of bus bandwidth, against the 6.0 GB/s at which the 161 all-reduces of a 1,536-token prompt would cost exactly the (n-1) compute times.</p>
+<p>Against the break-even derived from public peak numbers (tensor parallelism stops winning on the token gap when its communication reaches (n-1) memory-bound steps, about 49 ms for the 32B model on four cards and 126 ms for the 72B on eight; on prompts when it reaches (n-1) compute times, about 0.46 s and 1.18 s), the decode numbers are well below the line at both batch sizes, and the prompt numbers are above it: 0.71 s against 0.46 s for the 32B model, 1.60 s against 1.18 s for the 72B. The 72B post measured the whole thing rather than its communication, and found the same ordering: TP8 had the shortest gap between tokens, and PP8 the fastest first token.</p>
+<p>For the 72B prompt: the 24 MiB all-reduce on eight cards runs at 4.45 GB/s of bus bandwidth, against the 6.0 GB/s at which the 161 all-reduces of a 1,536-token prompt would cost exactly the (n-1) compute times.</p>
 <p><strong>Scope.</strong> NCCL 2.29.7 as shipped in vLLM 0.30.0’s wheel with default settings, on eight RTX 4090s at PCIe 4.0 x16 behind two Xeon Gold 5320 sockets with no GPU peer-to-peer, message sizes 4 KiB to 256 MiB, ring algorithm throughout the large sizes. Cards with peer-to-peer or NVLink, tuned NCCL (<code>NCCL_BUFFSIZE</code>, <code>NCCL_ALGO</code>, <code>NCCL_SHM_USE_CUDA_MEMCPY</code> and the like) and host-staged replacements for NCCL are not covered.</p>
 <h2 id="Reproduce">Reproduce</h2>
-<p>The harness is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/collectives-no-p2p">rockyshi-dev/collectives-no-p2p</a>: <code>python -m collbench run</code> does the machine check, the transport check, the five rounds with their calibration cells and the telemetry, and <code>python -m collbench report</code> recomputes every gate, the seven ratios and the tables above from the saved records. Its README defines every quantity and gate. The numbers in this post are from a rerun of that repository (commit <code>e101ebd</code>) on the same server; it reproduced the earlier internal run within 1% on every ratio and bandwidth, with the same verdict on all seven predictions.</p>
+<p>The harness is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/collectives-no-p2p">rockyshi-dev/collectives-no-p2p</a>: <code>python -m collbench run</code> does the machine check, the transport check, the five rounds with their calibration cells and the telemetry, and <code>python -m collbench report</code> recomputes every gate, the seven ratios and the tables above from the saved records. Its README defines every quantity and gate. The numbers in this post were produced by that repository at commit <code>e101ebd</code> on this server.</p>
 
     </div>
 
