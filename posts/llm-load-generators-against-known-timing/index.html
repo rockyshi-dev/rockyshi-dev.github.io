@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="I pointed vLLM bench, GuideLLM, AIPerf and inference-perf at a simulated LLM server whose latencies are fixed, with an idle probe as ground truth. All four report correct numbers up to 200 requests pe">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust">
+<meta property="og:url" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="I pointed vLLM bench, GuideLLM, AIPerf and inference-perf at a simulated LLM server whose latencies are fixed, with an idle probe as ground truth. All four report correct numbers up to 200 requests pe">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/setup.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/completed.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/lateness.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/ttft.svg">
+<meta property="article:published_time" content="2026-10-25T04:18:50.000Z">
+<meta property="article:modified_time" content="2026-10-25T04:18:50.309Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/setup.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/llm-load-generators-against-known-timing/","path":"posts/llm-load-generators-against-known-timing/","title":"Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Who-delivers-the-load"><span class="nav-number">2.</span> <span class="nav-text">Who delivers the load</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Whose-numbers-to-trust"><span class="nav-number">3.</span> <span class="nav-text">Whose numbers to trust</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#A-server-bug-on-the-way"><span class="nav-number">4.</span> <span class="nav-text">A server bug on the way</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-to-take-from-it"><span class="nav-number">5.</span> <span class="nav-text">What to take from it</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">8</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/llm-load-generators-against-known-timing/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust | Rocky Shi">
+      <meta itemprop="description" content="I pointed vLLM bench, GuideLLM, AIPerf and inference-perf at a simulated LLM server whose latencies are fixed, with an idle probe as ground truth. All four report correct numbers up to 200 requests per second. At 500, GuideLLM falls short of the asked load, inference-perf never writes its report, and vLLM bench adds 42 to 50 ms of its own to the TTFT p99.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-24 21:18:50" itemprop="dateCreated datePublished" datetime="2026-10-24T21:18:50-07:00">2026-10-24</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">I pointed vLLM bench, GuideLLM, AIPerf and inference-perf at a simulated LLM server whose latencies are fixed, with an idle probe as ground truth. All four report correct numbers up to 200 requests per second. At 500, GuideLLM falls short of the asked load, inference-perf never writes its report, and vLLM bench adds 42 to 50 ms of its own to the TTFT p99.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>A serving benchmark is two programs: the server and the load generator. When a number moves, it is
+usually blamed on the server. I wanted to know how far the four common LLM load generators can be
+trusted on their own: up to what request rate does each one send the load it was asked for, and
+does each number it reports match what the server actually did?</p>
+<p>To answer that, the server has to be known in advance. So I ran each tool against a simulated
+server whose timing is fixed, with an idle probe next to it that records what the server did
+during the same run.</p>
+<p>The short answer: up to 200 requests per second, all four deliver the load, and every latency
+they report matches the server within 10 ms. At 500, vLLM bench and AIPerf still
+deliver; GuideLLM sends no more than about 400 requests per second and completes about 26,000 of the 30,000
+it was asked for; inference-perf sends
+everything but is stopped before it writes its report. And the tool that delivers at 500 with
+the least trouble, vLLM bench, reports a TTFT p99 about 45 ms above the server’s.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<img src="/posts/llm-load-generators-against-known-timing/setup.svg" class="" title="The test bench " alt="A load generator on 26 cores of socket 0 sends R requests per second for 60 seconds to llm-d-inference-sim on 16 cores of socket 1, configured for a TTFT of 200 ms, 20 ms per token, 50 tokens and no queueing. An idle probe on 4 other cores sends one request every 100 ms, and the server counters are read 10 times per second. The probe and the counters are the ground truth.">
+<p><strong>The server</strong> is <a target="_blank" rel="noopener" href="https://github.com/llm-d/llm-d-inference-sim">llm-d-inference-sim</a> v0.11.2,
+configured for a time to first token (TTFT) of 200 ms, 20 ms between tokens, no randomness and no
+queueing (8,192 concurrent sequences). It streams one token per chunk. Every request asks for
+exactly 50 tokens (<code>max_tokens: 50</code>, <code>ignore_eos: true</code>), so a request takes
+200 + 49 x 20 = 1,180 ms.</p>
+<p><strong>The tools</strong>, at pinned releases, all on the completions API with streaming and a synthetic
+prompt of about 100 tokens:</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Release</th>
+<th>Constant-rate mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vllm bench serve</code></td>
+<td>vLLM v0.30.0</td>
+<td><code>--request-rate R --burstiness inf</code>, 60 R prompts, one process</td>
+</tr>
+<tr>
+<td>GuideLLM</td>
+<td>v0.8.0</td>
+<td>constant profile, 60 s, 24 worker processes</td>
+</tr>
+<tr>
+<td>AIPerf</td>
+<td>v0.13.0</td>
+<td>constant arrivals, 60 s, up to 24 workers</td>
+</tr>
+<tr>
+<td>inference-perf</td>
+<td>v0.7.0</td>
+<td>constant load, 60 s, 24 workers</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The ground truth.</strong> A probe, a minimal client in its own process, sends one request every
+100 ms during every run and logs its TTFT, chunk gaps and end-to-end time. It is never busy, so
+what it sees is what the server did. The server’s own request and token counters are read ten
+times per second, and the probe’s requests are subtracted, which leaves the tool’s.</p>
+<p><strong>The machine</strong> is a two-socket Xeon Gold 5320 node. The tool gets the 26 cores of socket 0; the
+server and the probe get separate cores of socket 1; a run is accepted only if processes outside
+the bench used at most 2% of those cores. Each tool runs at R = 10, 50, 200, 500 and 1000 requests
+per second for 60 s, three rounds, the tools in a fresh random order at every rate, the server
+restarted before every run.</p>
+<p>At 1000 requests per second the simulator itself is the limit: the probe’s TTFT p99 was 210.1 ms,
+then 222.8 ms on the retry, above the 210 ms I accept for a server that is not saturated. So 1000 is dropped for every tool,
+and the valid rates are 10, 50, 200 and 500.</p>
+<h2 id="Who-delivers-the-load">Who delivers the load</h2>
+<p>Two kinds of tool need two definitions of “delivered”. vLLM bench and inference-perf send a fixed
+number of requests and wait for all of them, so they deliver if the time from their first to their
+last completion is at most 60 / 0.95 = 63.16 s. GuideLLM and AIPerf stop at 60 s, so they deliver
+if they complete at least 95% of R x (60 - 1.18) requests. “Yes” below holds in all three rounds.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>10</th>
+<th>50</th>
+<th>200</th>
+<th>500</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>vLLM bench</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>AIPerf</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>GuideLLM</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td><strong>no</strong></td>
+</tr>
+<tr>
+<td>inference-perf</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td><strong>no</strong></td>
+</tr>
+</tbody>
+</table>
+<p>vLLM bench’s first-to-last completion span was between 59.71 and 60.21 s in every run, so it kept
+the schedule even at 500. AIPerf completed 29,999 requests at 500 in every round.</p>
+<p><strong>GuideLLM at 500</strong> completed 26,309, 26,202 and 26,024 requests, against a floor of 27,940.</p>
+<img src="/posts/llm-load-generators-against-known-timing/completed.svg" class="" title="Completed requests at 500 per second " alt="GuideLLM completed 26,309, 26,202 and 26,024 requests in its three rounds, below the delivery floor of 27,940; AIPerf completed 29,999 in each round.">
+<p>The server was not the reason: during those runs the probe’s TTFT p99 was 202.4 to 202.6 ms.
+GuideLLM itself shows where the requests went. Its JSON export records, for every request, when it
+was planned to be sent, when it was put on a worker’s queue, when a worker took it off, and when it
+was sent. Taking the send time minus the planned time:</p>
+<img src="/posts/llm-load-generators-against-known-timing/lateness.svg" class="" title="GuideLLM send delay " alt="For every request of round 1, how late GuideLLM sent it against its own plan, by planned send time. At 200 requests per second every request is sent within 0.16 s of plan. At 500 the requests are on time for the first 20 seconds, then fall behind steadily, to 5 to 9 seconds late by second 50.">
+<ul>
+<li>At 200 requests per second, no request is sent more than 0.16 s after its planned time.</li>
+<li>At 500, GuideLLM keeps the schedule for about the first 20 seconds. From second 20 to 58 it
+sends only 402 to 409 requests per second, so requests fall further behind the longer the run
+goes: the median request planned at second 30 goes out 1.9 to 2.6 s late, the latest 15 to 17 s
+late.</li>
+<li>The delay is in putting requests on the queue. In round 1, early requests are queued about 4 s
+ahead of their planned time; that head start is used up by about second 20, and from then on a
+request is queued late by the same amount it is sent late. Once queued, it is sent about 2 ms
+later (median), and once a worker takes it, within 0.47 ms (p99).</li>
+<li>When its 60 seconds are up, GuideLLM stops. The requests it has not sent by then, 3,690 to 3,976
+of the 30,000 planned, are never sent. That is the whole shortfall.</li>
+</ul>
+<p>So on this machine GuideLLM v0.8.0 with 24 worker processes cannot queue more than about 400
+requests per second, and the rest piles up and is dropped at the end.</p>
+<p><strong>inference-perf at 500</strong> sent and completed its requests on schedule: 29,998, 30,000 and 29,999
+completions within a first-to-last span of 59.9 to 60.1 s. Its log shows the load stage finished
+after about 62 s, then “Generating Reports…”, and nothing more until the bench stopped it, 180 s
+after its first completion. At 200 requests per second it wrote its report normally. So at 500 the load went out,
+but no numbers came back. The one or two missing requests in rounds 1 and 3 were never sent: a
+worker logged that it could not generate a prompt of exactly 100 tokens after 20 attempts.</p>
+<h2 id="Whose-numbers-to-trust">Whose numbers to trust</h2>
+<p>Each tool’s summary was checked two ways: against the tool’s own per-request data (completed
+count, achieved rate, TTFT and end-to-end p50 and p99), and against the server (TTFT and
+end-to-end p50 against the probe, the gap between tokens, 50 tokens per request).</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>agrees</th>
+<th>differs by its documented definition</th>
+<th>no reference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>vLLM bench</td>
+<td>40</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>AIPerf</td>
+<td>40</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>GuideLLM</td>
+<td>20</td>
+<td>16</td>
+<td>4</td>
+</tr>
+<tr>
+<td>inference-perf</td>
+<td>27</td>
+<td>0</td>
+<td>13</td>
+</tr>
+</tbody>
+</table>
+<p>No cell is wrong. Three things are worth knowing when reading the tools side by side.</p>
+<p><strong>GuideLLM’s percentiles are nearest-rank.</strong> Its documentation defines the reported percentile as
+the value at rank ceil(q n)
+(<a target="_blank" rel="noopener" href="https://github.com/vllm-project/guidellm/blob/v0.8.0/docs/en/guides/metrics.md?plain=1#L191"><code>docs/en/guides/metrics.md</code></a>),
+and every GuideLLM percentile here follows that rule. The other three tools interpolate, as
+numpy does. On the same per-request values the two rules differ by up to 6 µs at p50 and up to
+727 µs at p99; the largest gaps are at 10 requests per second, where the tail holds few samples.
+Read with numpy’s rule, three of GuideLLM’s cells at R = 10 would be wrong; read with its own, all
+are right. GuideLLM’s achieved rate is time-weighted and has no single count to check it against,
+and inference-perf’s token gap has no expected value because it re-tokenizes the streamed chunks;
+together with inference-perf’s cells at 500, where it wrote no report, those are the “no reference” cells.</p>
+<p><strong>GuideLLM’s p50 is sometimes one sample off.</strong> The floating-point drift described in
+<a target="_blank" rel="noopener" href="https://github.com/vllm-project/guidellm/issues/1193">vllm-project/guidellm#1193</a> moves the
+reported p50 one rank above the documented one. Whether it happens depends on the exact request
+count, so it comes and goes between rounds: here it hit 3 of the 12 p50 cells at 200 and 500
+requests per second. The error is 0.24 to
+0.72 µs, because neighbouring samples are nearly equal; no one reading a latency would see it.</p>
+<p><strong>The tail is where the tool’s own time shows.</strong> All four tools’ TTFT and end-to-end p50 match the
+probe within the bench’s tolerance (10%). But the probe also gives the server’s TTFT p99, and
+setting each tool’s reported p50 and p99 against the probe’s shows how much of the reported
+latency is the tool’s own:</p>
+<img src="/posts/llm-load-generators-against-known-timing/ttft.svg" class="" title="Reported TTFT minus the server" alt="s ">
+<ul>
+<li><strong>vLLM bench</strong> is within 2 ms of the server up to 200 requests per second at p50, and 10 to 12 ms
+above it at 500. Its TTFT p99 at 500 is 245.6 to 252.4 ms, while the server’s was 202.7 to
+203.7 ms in the same runs: 42 to 50 ms of the reported tail is the client’s. vLLM bench is one
+process, and its busiest thread is at 0.83 of a core at 500.</li>
+<li><strong>GuideLLM</strong> reports a TTFT p50 3.7 to 4.2 ms above the server at every rate up to 200, and 5.8 to
+6.0 ms above it at 500; at p99 the excess grows to 18 to 20 ms at 500.</li>
+<li><strong>AIPerf</strong> and <strong>inference-perf</strong> stay within 0.5 ms of the server at p50 at every rate they
+reported, and within about 7 ms at p99.</li>
+</ul>
+<p>So a TTFT p99 from vLLM bench at 500 requests per second on this machine is 21 to 24% higher than
+what the server delivered, and nothing in the tool’s own output says so.</p>
+<h2 id="A-server-bug-on-the-way">A server bug on the way</h2>
+<p>While I was building this bench, the simulator’s <code>/metrics</code> endpoint sometimes answered
+HTTP 500 right after a client had closed streams mid-response: its streaming goroutine wrote to a
+request context that had already been handed back to the pool. I reported it as
+<a target="_blank" rel="noopener" href="https://github.com/llm-d/llm-d-inference-sim/issues/801">llm-d/llm-d-inference-sim#801</a>; the
+bench retries a failed counter read.</p>
+<h2 id="What-to-take-from-it">What to take from it</h2>
+<p>On one two-socket node, with a server that is never the bottleneck below 1000 requests per second:</p>
+<ul>
+<li>Up to 200 requests per second, any of the four tools gives numbers you can use as they are.
+Compare GuideLLM’s percentiles with another tool’s only knowing that GuideLLM’s are
+nearest-rank.</li>
+<li>At 500, vLLM bench and AIPerf still send the load. For latency at that rate, AIPerf’s numbers
+match the server; vLLM bench’s tail includes tens of milliseconds of its own.</li>
+<li>GuideLLM and inference-perf at 500 need a different configuration or a different tool:
+GuideLLM tops out near 400 requests per second, and inference-perf did not finish its report
+within 180 s.</li>
+</ul>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The bench is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/loadgen-truth-bench">rockyshi-dev/loadgen-truth-bench</a>.
+It needs only CPUs and a tokenizer, builds the simulator and every tool at the pinned releases,
+and writes every raw measurement next to the tables. Every number in this post comes from a run of
+that repository; the GuideLLM send delays are computed from GuideLLM’s own exports by
+<code>scripts/guidellm_timing.py</code> in the same repository.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/slurm-cluster-in-docker/" rel="prev" title="Learning Slurm on one machine: a four-node practice cluster in Docker">
+                  <i class="fa fa-angle-left"></i> Learning Slurm on one machine: a four-node practice cluster in Docker
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
