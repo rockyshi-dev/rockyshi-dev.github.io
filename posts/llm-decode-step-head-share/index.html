@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="I split vLLM&#39;s decode step into forward pass, output head, grammar mask and sampler with CUDA events on an RTX 4090. In 4-bit Qwen2.5-7B the head, which 4-bit checkpoints leave in 16 bits, takes 1.14">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token">
+<meta property="og:url" content="https://rockyshi.dev/posts/llm-decode-step-head-share/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="I split vLLM&#39;s decode step into forward pass, output head, grammar mask and sampler with CUDA events on an RTX 4090. In 4-bit Qwen2.5-7B the head, which 4-bit checkpoints leave in 16 bits, takes 1.14">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-decode-step-head-share/markers.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-decode-step-head-share/step.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/llm-decode-step-head-share/smaller.svg">
+<meta property="article:published_time" content="2026-10-29T17:36:57.000Z">
+<meta property="article:modified_time" content="2026-10-29T17:36:57.718Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/llm-decode-step-head-share/markers.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/llm-decode-step-head-share/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/llm-decode-step-head-share/","path":"posts/llm-decode-step-head-share/","title":"Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-the-step-goes"><span class="nav-number">2.</span> <span class="nav-text">Where the step goes</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#A-faster-kernel-would-not-help-a-smaller-head-would"><span class="nav-number">3.</span> <span class="nav-text">A faster kernel would not help; a smaller head would</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Mask-and-sampler-are-too-small-to-fuse"><span class="nav-number">4.</span> <span class="nav-text">Mask and sampler are too small to fuse</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-to-take-from-it"><span class="nav-number">5.</span> <span class="nav-text">What to take from it</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">6.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">11</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">8</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/llm-decode-step-head-share/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token | Rocky Shi">
+      <meta itemprop="description" content="I split vLLM&#39;s decode step into forward pass, output head, grammar mask and sampler with CUDA events on an RTX 4090. In 4-bit Qwen2.5-7B the head, which 4-bit checkpoints leave in 16 bits, takes 1.14 ms of a 6.0 ms token (19%) and already runs at 95% of the card&#39;s memory bandwidth; mask and sampler together take 2%.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-29 10:36:57" itemprop="dateCreated datePublished" datetime="2026-10-29T10:36:57-07:00">2026-10-29</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">I split vLLM's decode step into forward pass, output head, grammar mask and sampler with CUDA events on an RTX 4090. In 4-bit Qwen2.5-7B the head, which 4-bit checkpoints leave in 16 bits, takes 1.14 ms of a 6.0 ms token (19%) and already runs at 95% of the card's memory bandwidth; mask and sampler together take 2%.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>At one request in flight, every token an LLM generates costs one decode step: the forward pass
+through the layers, then the output head (the last hidden state times the vocabulary matrix, one
+score per token in the vocabulary), then, if the output must follow a schema, a mask over those
+scores, and finally the sampler that picks the token. Quantizing a model to 4 bits shrinks the
+layers, but the 4-bit checkpoints people download leave the head in 16 bits. So the smaller the
+layers get, the larger the head’s share becomes.</p>
+<p>I wanted to know how large, on a consumer card, and whether either end of the tail is worth a
+kernel: a smaller or faster head, or a kernel that fuses mask and sampler.</p>
+<p>The short answer, for Qwen2.5-7B-Instruct on one RTX 4090 with vLLM v0.30.0: in the 4-bit model
+the head takes 1.14 ms of a 6.0 ms token, 19%. It already reads its 1.09 GB at 95% of the card’s
+memory bandwidth, so a faster kernel cannot help; storing the head in fewer bits can, by up to
+14% per token. Mask and sampler together take 2%, too little for a fused kernel to matter.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<ul>
+<li>One RTX 4090 (24 GB), NVIDIA driver 550.144.03, vLLM v0.30.0 (CUDA 12.9 build), served with
+<code>vllm serve &lt;model&gt;</code> and nothing else: the V2 model runner with asynchronous scheduling, and the
+model’s own default sampling settings (temperature 0.7, top-p 0.8, top-k 20, repetition
+penalty 1.05).</li>
+<li><strong>Two checkpoints of the same model</strong>:
+<a target="_blank" rel="noopener" href="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4">Qwen2.5-7B-Instruct-GPTQ-Int4</a>
+(4-bit layers on the Marlin kernels, 16-bit head) and its 16-bit original. The head is the same
+152,064 x 3,584 matrix, 1.09 GB, in both: 24% of the bytes a decode step reads in the 4-bit
+model, 8% in the 16-bit one.</li>
+<li><strong>Requests</strong>: 256-token prompts, 256 output tokens, streamed. Plain text, and JSON constrained
+by a schema (an array of 400 to 600 integers) so that the grammar mask is active on every step.
+One request in flight, and eight.</li>
+</ul>
+<img src="/posts/llm-decode-step-head-share/markers.svg" class="" title="The decode step and its markers " alt="Forward pass, output head, grammar mask and sampler run one after another in each step, with a CUDA event at every boundary; the step period runs from one forward start to the next.">
+<p><strong>How the step is split.</strong> A patched copy of vLLM’s model runner, loaded only by the timing
+server, records a CUDA event at every boundary of the step (before and after the forward pass,
+after the head, after the mask, and inside the sampler). Recording an event never waits for the
+GPU, and the events are read only after all requests have finished. The difference between two
+events is the GPU time of that segment.</p>
+<p><strong>Checks that the split means what it says</strong>, all passed for the cells below:</p>
+<ul>
+<li>The patched server’s gap between tokens is within 3% of an unpatched server’s (it is within
+0.4%), so the markers do not slow the step.</li>
+<li>The segments add up to the step period to within 1%. The remaining 0.9% is the only time in a
+step the GPU waits for anything, so the CPU does not set the pace.</li>
+<li>The head, timed alone in a separate process with the same shape, takes 1.17 ms against 1.14 ms
+inside the server.</li>
+<li>Five rounds; the head’s share varies by less than 0.001 between them, and other processes used
+at most 2% of the CPU while each was measured.</li>
+</ul>
+<h2 id="Where-the-step-goes">Where the step goes</h2>
+<img src="/posts/llm-decode-step-head-share/step.svg" class="" title="One decode step at one request " alt="Qwen2.5-7B 4-bit: forward pass 4.66 ms, head 1.14 ms, mask and sampler 0.12 ms, 5.97 ms per token, head 19%. 16-bit: forward pass 14.6 ms, head 1.14 ms, mask and sampler 0.12 ms, 15.9 ms per token, head 7%.">
+<table>
+<thead>
+<tr>
+<th>One request, median over five rounds</th>
+<th>4-bit</th>
+<th>16-bit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>time per output token</td>
+<td>5.98 ms</td>
+<td>15.90 ms</td>
+</tr>
+<tr>
+<td>forward pass (28 layers)</td>
+<td>4.69 ms</td>
+<td>14.62 ms</td>
+</tr>
+<tr>
+<td>output head</td>
+<td>1.14 ms (19.1%)</td>
+<td>1.14 ms (7.2%)</td>
+</tr>
+<tr>
+<td>sampler</td>
+<td>0.11 ms</td>
+<td>0.11 ms</td>
+</tr>
+<tr>
+<td>grammar mask (JSON only)</td>
+<td>0.005 ms</td>
+<td>0.005 ms</td>
+</tr>
+<tr>
+<td>mask and sampler, JSON</td>
+<td>2.0%</td>
+<td>0.7%</td>
+</tr>
+</tbody>
+</table>
+<p>At eight requests in flight the picture is the same: the head is 1.16 ms of a 6.03 ms token
+(19.2%) in the 4-bit model, and mask and sampler stay at 2.1-2.3%.</p>
+<p>The head costs the same 1.14 ms in both models, because it is the same 16-bit matrix doing the
+same work. What changes is everything around it: 4-bit layers cut the forward pass from 14.6 to
+4.7 ms, and the head that was 7% of a token becomes 19%.</p>
+<h2 id="A-faster-kernel-would-not-help-a-smaller-head-would">A faster kernel would not help; a smaller head would</h2>
+<p>The head reads 152,064 x 3,584 x 2 bytes = 1.09 GB per token in 1.14 ms: 956 GB/s, 95% of the
+RTX 4090’s 1,008 GB/s memory bandwidth. At one request the head is a matrix-vector product, and
+this one is already as fast as the memory lets it be. A better kernel can win at most the last
+5%.</p>
+<p>What can win is reading fewer bytes. vLLM keeps the head in the checkpoint’s 16-bit dtype unless
+the quantization config names it (<code>&quot;lm_head&quot;: true</code>), and none of the common 4-bit releases of
+this model do: GPTQ and AWQ leave it out, the compressed-tensors ones list it under <code>ignore</code>. If
+the head read 8-bit or 4-bit weights at the bandwidth it reaches now, the token would get this
+much shorter:</p>
+<img src="/posts/llm-decode-step-head-share/smaller.svg" class="" title="What a smaller head would save " alt="Qwen2.5-7B 4-bit at one request: 6.00 ms per token with the 16-bit head as measured; an estimated 5.43 ms with an 8-bit head (10% less) and 5.14 ms with a 4-bit head (14% less).">
+<p>These two bars are arithmetic on the measured segments, not measurements of a quantized head;
+they also leave out any loss of accuracy from quantizing the head. One such route is already
+proposed upstream: <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/55494">vllm-project/vllm#55494</a>
+stores an exact packed encoding of the 16-bit head, so no weight changes, and reports the head
+1.28x faster on an RTX 4060 laptop GPU.</p>
+<h2 id="Mask-and-sampler-are-too-small-to-fuse">Mask and sampler are too small to fuse</h2>
+<p>With the JSON grammar on, the mask takes 5 µs and the sampler (penalties, top-k and top-p, and
+the draw) 0.11 ms: 2.0% of a token in the 4-bit model. A kernel that fused the two could save at
+most that 2%, against about 14% from a 4-bit head. On this card, at this model size, the tail work
+worth doing is the head.</p>
+<h2 id="What-to-take-from-it">What to take from it</h2>
+<p>On an RTX 4090 with a 4-bit 7B model:</p>
+<ul>
+<li>The 16-bit output head is a fifth of every token. It runs at the memory’s speed, so the way to
+shorten it is a smaller format for the head, not a faster kernel: up to 10% per token at 8 bits
+and 14% at 4 bits, before any accuracy cost.</li>
+<li>The grammar mask and the sampler cost 2% together; leave them alone.</li>
+</ul>
+<p>The measurements cover one and eight requests in flight. With a small model (Qwen3-1.7B) and at 32
+requests in flight, some streams received two tokens in one chunk, which this setup does not
+count as a usable per-token gap, so those cells are not reported.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The harness is at
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/decode-tail-split">rockyshi-dev/decode-tail-split</a>: it builds the
+prompts, the timing overlay of vLLM’s model runner (the installed vLLM is never edited), runs the
+unpatched and patched servers and the head-alone timing, and recomputes every share above from
+the raw step records (<code>python -m tailsplit report</code>). The numbers in this post come from a run of
+that repository.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/agent-kv-cache-restore-or-recompute/" rel="prev" title="An agent&#39;s KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it?">
+                  <i class="fa fa-angle-left"></i> An agent's KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it?
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
