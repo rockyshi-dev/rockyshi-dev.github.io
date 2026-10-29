@@ -786,7 +786,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+      <time title="Modified: 2026-10-28 21:54:54" itemprop="dateModified" datetime="2026-10-28T21:54:54-07:00">2026-10-28</time>
     </span>
 
   
@@ -799,7 +799,7 @@
     
     
     <div class="post-body" itemprop="articleBody">
-          <p>Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens, and throughput depends on load: vLLM's "PP for higher throughput without NVLink" holds at 32 concurrent requests and fails at 8.</p>
+          <p>Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens, and throughput depends on load: vLLM's "PP for higher throughput without NVLink" holds at 32 concurrent requests and fails at 8. Qwen2.5-32B on four of the cards shows the same trade-off.</p>
           <!--noindex-->
             <div class="post-button">
               <a class="btn" href="/posts/tp-pp-72b-without-p2p/">
