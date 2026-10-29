@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="When a coding agent&#39;s session is evicted from a 24 GB GPU during a tool call, vLLM recomputes it by default: 3.8 s to the next first token at 28K tokens. Restoring it from pinned host memory with vLLM">
+<meta property="og:type" content="article">
+<meta property="og:title" content="An agent&#39;s KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it?">
+<meta property="og:url" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="When a coding agent&#39;s session is evicted from a 24 GB GPU during a tool call, vLLM recomputes it by default: 3.8 s to the next first token at 28K tokens. Restoring it from pinned host memory with vLLM">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/session.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/ttft.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/split.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/trace.svg">
+<meta property="article:published_time" content="2026-10-29T04:43:44.000Z">
+<meta property="article:modified_time" content="2026-10-29T04:43:44.880Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="GPU">
+<meta property="article:tag" content="LLM serving">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="vLLM">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/session.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/","path":"posts/agent-kv-cache-restore-or-recompute/","title":"An agent's KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it?"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>An agent's KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it? | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#The-setup"><span class="nav-number">1.</span> <span class="nav-text">The setup</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Restoring-beats-recomputing-at-every-length"><span class="nav-number">2.</span> <span class="nav-text">Restoring beats recomputing at every length</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-the-restore-time-goes"><span class="nav-number">3.</span> <span class="nav-text">Where the restore time goes</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#The-lazy-connector-crashes-on-this-driver"><span class="nav-number">4.</span> <span class="nav-text">The lazy connector crashes on this driver</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#How-often-eviction-happens"><span class="nav-number">5.</span> <span class="nav-text">How often eviction happens</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#What-to-take-from-it"><span class="nav-number">6.</span> <span class="nav-text">What to take from it</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">7.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">10</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">8</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/agent-kv-cache-restore-or-recompute/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="An agent&#39;s KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it? | Rocky Shi">
+      <meta itemprop="description" content="When a coding agent&#39;s session is evicted from a 24 GB GPU during a tool call, vLLM recomputes it by default: 3.8 s to the next first token at 28K tokens. Restoring it from pinned host memory with vLLM&#39;s OffloadingConnector takes 0.34 s, if the connector is told to keep the generated turn too. The copy runs at 9.8 GB&#x2F;s and adds to the time a kept session needs.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          An agent's KV cache during a tool call on one RTX 4090: restore it from host memory, or recompute it?
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-28 21:43:44" itemprop="dateCreated datePublished" datetime="2026-10-28T21:43:44-07:00">2026-10-28</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">When a coding agent's session is evicted from a 24 GB GPU during a tool call, vLLM recomputes it by default: 3.8 s to the next first token at 28K tokens. Restoring it from pinned host memory with vLLM's OffloadingConnector takes 0.34 s, if the connector is told to keep the generated turn too. The copy runs at 9.8 GB/s and adds to the time a kept session needs.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>A coding agent alternates model turns with tool calls. While a tool runs, the session’s KV cache
+sits on the GPU doing nothing, and on a 24 GB card other sessions need that memory. If the cache
+is evicted, the next turn starts from scratch. vLLM ships two connectors that keep a copy in host
+memory so the cache can be restored instead of recomputed.</p>
+<p>I measured what each choice costs on one RTX 4090 with Qwen2.5-7B-Instruct and an unmodified
+vLLM v0.30.0: the time to the first token of the turn after the tool call, when the session’s
+cache was kept on the GPU, restored from host memory, or recomputed.</p>
+<p>The short answer: at 28,672 tokens, recomputing takes 3.8 s and restoring takes 0.34 s, 9% of
+that. But vLLM’s offloading connector by default stores only prompt blocks, so the turn the model
+just wrote is recomputed anyway, which adds 38 to 58 ms. The copy from host memory runs at
+9.8 GB/s, and its time adds to, rather than overlaps with, what a kept session needs. The other
+connector, in its lazy mode, crashes the engine on this machine’s driver.</p>
+<span id="more"></span>
+<h2 id="The-setup">The setup</h2>
+<img src="/posts/agent-kv-cache-restore-or-recompute/session.svg" class="" title="One measured session " alt="Turn 1 is a prompt of N minus 768 tokens after which the model writes 512 tokens; during the tool call, other prompts fill 1.5 times the KV pool; the resume request has N tokens, turn 1 plus the tool result. Its time to first token is measured with the KV cache kept, restored from host memory, or recomputed.">
+<ul>
+<li>One RTX 4090 (24 GB) in a two-socket Xeon Gold 5320 server, NVIDIA driver 550.144.03.</li>
+<li>vLLM v0.30.0 (CUDA 12.9 build), all defaults except the KV connector. Qwen2.5-7B-Instruct in
+bf16: 57,344 bytes of KV cache per token, and a GPU KV pool of 118,080 tokens (6.77 GB).</li>
+<li><strong>A session</strong> has two turns. Turn 1 is a prompt of N - 768 tokens, and the model writes 512
+tokens. Then, standing in for the tool call, other prompts are sent until together they need
+1.5 times the KV pool, which evicts the session from the GPU. Two seconds later the resume
+request arrives: turn 1, the 512 generated tokens and a 256-token tool result, N tokens in all,
+sent as token ids. N is 2,048, 8,192 and 28,672.</li>
+<li><strong>What is measured</strong>: the client’s time to the first streamed token of the resume request, and,
+from the server’s counters, how many of its tokens came from the GPU cache, from host memory or
+were recomputed. One request is in flight at a time.</li>
+<li>Five rounds, four sessions per configuration and length in each, the configurations in a fresh
+random order every round. A round counts only if no other process used the GPU and other
+processes used at most 2% of each CPU socket.</li>
+</ul>
+<p>The configurations differ only in <code>--kv-transfer-config</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>What happens to the evicted session</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>kept (no eviction)</td>
+<td>its cache is still on the GPU</td>
+</tr>
+<tr>
+<td>recomputed</td>
+<td>vLLM’s default: the cache is gone and the whole context is computed again</td>
+</tr>
+<tr>
+<td>restored, prompt only</td>
+<td><code>OffloadingConnector</code> with a 16 GiB pinned host buffer, as shipped: it stores prompt blocks as they are computed (<code>offload_prompt_only: true</code>)</td>
+</tr>
+<tr>
+<td>restored, prompt and turn</td>
+<td>the same with <code>&quot;offload_prompt_only&quot;: false</code>: generated blocks are stored too</td>
+</tr>
+<tr>
+<td>lazy</td>
+<td><code>SimpleCPUOffloadConnector</code> with <code>&quot;lazy_offload&quot;: true</code>: blocks are copied to host only when they are about to be evicted</td>
+</tr>
+</tbody>
+</table>
+<p>The counters confirm each configuration did what its name says, in every session: the kept session
+recomputes 272 tokens (the tool result plus the last partial block), the recomputed one all N, the
+prompt-only restore 768 and the full restore 272, with the rest coming from host memory.</p>
+<h2 id="Restoring-beats-recomputing-at-every-length">Restoring beats recomputing at every length</h2>
+<img src="/posts/agent-kv-cache-restore-or-recompute/ttft.svg" class="" title="Resume time per configuration " alt="Median time to first token, log scale. Recomputed: 203, 844 and 3,795 ms at 2,048, 8,192 and 28,672 tokens. Restored prompt only: 100, 170 and 399 ms. Restored prompt and turn: 63, 127 and 341 ms. Kept on the GPU: 53, 82 and 177 ms.">
+<table>
+<thead>
+<tr>
+<th>Tokens</th>
+<th>kept</th>
+<th>restored, prompt and turn</th>
+<th>restored, prompt only</th>
+<th>recomputed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2,048</td>
+<td>53 ms</td>
+<td>63 ms (0.31)</td>
+<td>100 ms (0.50)</td>
+<td>203 ms</td>
+</tr>
+<tr>
+<td>8,192</td>
+<td>82 ms</td>
+<td>127 ms (0.15)</td>
+<td>170 ms (0.20)</td>
+<td>844 ms</td>
+</tr>
+<tr>
+<td>28,672</td>
+<td>177 ms</td>
+<td>341 ms (0.09)</td>
+<td>399 ms (0.11)</td>
+<td>3,795 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Medians over 20 sessions; in brackets, the time as a fraction of recomputing. Computed round by
+round, the fractions stay within 0.003 of each other for the full restore and within 0.02 for the
+prompt-only one.</p>
+<p>Recomputing grows faster than linearly with the context, because attention over a longer prefix
+costs more per token, while restoring grows with the bytes copied. So the longer the session, the
+bigger the win: from 3x at 2K tokens to 11x at 28K.</p>
+<h2 id="Where-the-restore-time-goes">Where the restore time goes</h2>
+<p>vLLM times its own host-to-GPU copies (<code>vllm:kv_offload_load_time</code>), and the counters were saved
+before and after every resume request, so the copy can be separated from the rest:</p>
+<img src="/posts/agent-kv-cache-restore-or-recompute/split.svg" class="" title="Resume time at 28,672 tokens split " alt="Kept on the GPU: 177 ms. Restored prompt and turn: 177 ms as if kept plus a 167 ms copy, 341 ms in total. Restored prompt only: 177 ms plus a 164 ms copy plus 58 ms recomputing the generated turn, 399 ms.">
+<ul>
+<li><strong>The copy runs at 9.8 GB/s at every length</strong>: 10.4, 46.3 and 167.3 ms for 0.10, 0.45 and
+1.63 GB in the full restore (9.7 to 9.9 GB/s in each of the 120 restoring sessions). It is a
+rate, not a fixed cost, and it is 39% of the 25 GB/s a single large pinned copy from host memory
+to one GPU reaches on this machine (<a href="/posts/host-gpu-bandwidth-without-p2p/">an earlier post</a>).</li>
+<li><strong>Why 9.8 and not 25 GB/s: the copy goes one 32 KB block at a time.</strong> The connector keeps one
+host buffer per layer (the server logs <code>Allocating 28 CPU tensors</code>), so the unit it copies is
+one 16-token block of one layer: 16 x 2,048 bytes = 32 KB. vLLM hands the whole list to one
+batched copy, <code>cuMemcpyBatchAsync</code>, which exists only from CUDA 12.8; on this driver (12.4) the
+lookup fails and vLLM falls back to one <code>cudaMemcpyAsync</code> per block
+(<a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/blob/v0.30.0/csrc/libtorch_stable/cache_kernels.cu?plain=1#L236-L244"><code>cache_kernels.cu</code></a>).
+Restoring 28,400 tokens is then 1,775 blocks x 28 layers = 49,700 copies, and each takes
+3.37 µs (3.33 and 3.34 µs at the two shorter lengths). At 25 GB/s, 32 KB needs 1.3 µs; the
+other 2 µs of every copy is the cost of issuing and finishing it on its own. On a driver with
+CUDA 12.8 or later the same list goes out as one batch.</li>
+<li><strong>The copy is not hidden behind computation.</strong> The time of a kept session plus the copy time is
+63, 128 and 345 ms; the measured restores take 63, 127 and 341 ms. A restored session pays for
+the copy and then for the same work a kept session does.</li>
+<li><strong>The default costs the generated turn.</strong> With <code>offload_prompt_only: true</code>, the 512 tokens the
+model wrote in turn 1 were never stored, so 496 more tokens are recomputed on resume (768
+instead of 272). That costs 38, 43 and 58 ms at the three lengths, more than a third of the
+resume time at 2K tokens. For an agent, whose context grows by its own output every turn,
+<code>&quot;offload_prompt_only&quot;: false</code> is the setting to use.</li>
+</ul>
+<p>In one round, three of the four prompt-only sessions at 28K tokens were 23 to 40 ms faster than
+the rest, and in another round one full-restore session was 42 ms faster. Their token counts,
+their copy times (165 to 167 ms) and the GPU clock around them (2,700 MHz, sampled once a second)
+are the same as everyone else’s, so the time they saved is in the rest of the request, not the
+copy, and none of the recorded quantities shows why. The medians above include them.</p>
+<h2 id="The-lazy-connector-crashes-on-this-driver">The lazy connector crashes on this driver</h2>
+<p><code>SimpleCPUOffloadConnector</code> with lazy offload crashed the engine in every round, a few requests
+into the first eviction, with <code>Segfault encountered</code> and no Python stack. Its copy path calls the
+CUDA driver function <code>cuMemcpyBatchAsync</code>, which drivers older than CUDA 12.8 do not have; this
+driver reports 12.4. The OffloadingConnector’s copy above checks the lookup and falls back; this
+connector’s copy, written separately in Python, does not check it and calls a null pointer. With a check added, the connector instead fails at start-up with an error that names
+the driver; that fix is <a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm/pull/59974">vllm-project/vllm#59974</a>.
+On a driver with CUDA 12.8 or later the connector takes the batched path, which this machine’s
+driver does not have.</p>
+<h2 id="How-often-eviction-happens">How often eviction happens</h2>
+<p>Whether any of this matters depends on how often a session is evicted during a tool call. I read
+the public <a target="_blank" rel="noopener" href="https://github.com/uw-syfi/TraceLab">TraceLab</a> coding-agent trace (release v0.0.1,
+432,510 tool calls from real sessions) and took, for each tool call, the context of the model turn
+that issued it. Only 9.3% of them (40,318) fit Qwen2.5-7B’s 32,768-token window at all; the rest
+belong to longer sessions that this model could not serve. The token counts are the providers’
+(the trace comes from Claude and Codex sessions), not Qwen’s.</p>
+<img src="/posts/agent-kv-cache-restore-or-recompute/trace.svg" class="" title="Tool calls that would not fit " alt="Of the tool calls whose context fits 32,768 tokens, the share whose KV cache does not fit in the card KV pool divided among k sessions: 0% for one and two sessions, 15% for four, 80% for eight; for tool calls over one second, 0, 0, 15 and 89%.">
+<p>A 32,768-token context needs less than half of this card’s 118,080-token pool, so one or two such
+sessions always fit. Shared by four sessions, 15% of these tool calls would not fit their quarter
+of the pool, and shared by eight, 80% would not fit their eighth (89% of the tool calls that run
+longer than a second, the ones worth evicting for). So on one 24 GB card with a 7B model, eviction
+during tool calls becomes common between four and eight concurrent agent sessions.</p>
+<h2 id="What-to-take-from-it">What to take from it</h2>
+<p>On one RTX 4090 with a 7B model and one session in flight at a time:</p>
+<ul>
+<li>If an agent’s session may be evicted during a tool call, give vLLM an <code>OffloadingConnector</code>
+with a host buffer and <code>&quot;offload_prompt_only&quot;: false</code>. At 28K tokens the next turn then starts
+in 0.34 s instead of 3.8 s.</li>
+<li>Expect the restore to cost its copy, at about 10 GB/s, on top of what a kept session costs: at
+1.6 GB that is 167 ms, against more than 3.6 s of recomputation.</li>
+<li>Do not use <code>SimpleCPUOffloadConnector</code>’s lazy mode on drivers older than CUDA 12.8.</li>
+</ul>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The harness is at
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/agent-kv-retention">rockyshi-dev/agent-kv-retention</a>. It builds the
+sessions, starts each configuration, runs the five rounds, and recomputes every count, time and
+ratio above from the raw records (<code>python -m akvr report</code>); <code>python -m akvr trace</code> does the TraceLab
+count, and <code>scripts/restore_copy.py</code> the copy times from the saved counters. The numbers in this
+post come from a run of that repository.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/GPU/" rel="tag"># GPU</a>
+              <a href="/tags/LLM-serving/" rel="tag"># LLM serving</a>
+              <a href="/tags/vLLM/" rel="tag"># vLLM</a>
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/llm-load-generators-against-known-timing/" rel="prev" title="Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust">
+                  <i class="fa fa-angle-left"></i> Four LLM load generators against a server with known timing: who delivers the load, and whose numbers to trust
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
