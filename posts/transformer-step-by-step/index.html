@@ -34,7 +34,7 @@
 <meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/causal_mask.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/variants.svg">
 <meta property="article:published_time" content="2026-11-06T05:55:01.000Z">
-<meta property="article:modified_time" content="2026-11-06T05:55:01.713Z">
+<meta property="article:modified_time" content="2026-11-06T06:27:05.998Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="PyTorch">
 <meta property="article:tag" content="Transformer">
@@ -226,8 +226,9 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
+      
 
-      <time title="Created: 2026-11-05 21:55:01" itemprop="dateCreated datePublished" datetime="2026-11-05T21:55:01-08:00">2026-11-05</time>
+      <time title="Created: 2026-11-05 21:55:01 / Modified: 22:27:05" itemprop="dateCreated datePublished" datetime="2026-11-05T21:55:01-08:00">2026-11-05</time>
     </span>
 
   
@@ -242,7 +243,7 @@
     
     <div class="post-body" itemprop="articleBody"><p>Most explanations of the Transformer either stop at the block diagram or jump straight to a
 production codebase. This one sits in between. It follows one tiny example, the sentence
-“我 有 一只 猫” translated to “I have a cat”, through the original encoder-decoder model of
+“她 喜欢 红 苹果” translated to “She likes red apples”, through the original encoder-decoder model of
 <a target="_blank" rel="noopener" href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> (I call it “the paper” below), and
 writes down the shape of every tensor on the way.</p>
 <p><strong>Who this is for.</strong> You write Python, you have seen a matrix multiplication and a softmax, and you
@@ -268,7 +269,7 @@ position encoding is added. The result is a matrix X of shape n × 512, with n =
 <li><strong>Encoding.</strong> X goes through the 6 encoder blocks in turn. Every block returns a matrix of the
 same shape as its input. The output of the last block is called the <strong>memory</strong>, still 4 × 512.</li>
 <li><strong>Decoding.</strong> The decoder receives the memory and starts from the begin symbol <code>&lt;Begin&gt;</code>. At
-each step it predicts the next token: <code>&lt;Begin&gt;</code> gives “I”, <code>&lt;Begin&gt; I</code> gives “have”, and so on
+each step it predicts the next token: <code>&lt;Begin&gt;</code> gives “She”, <code>&lt;Begin&gt; She</code> gives “likes”, and so on
 until it predicts <code>&lt;end&gt;</code>.</li>
 <li><strong>Output.</strong> A linear layer on top of the decoder maps each vector to the vocabulary size, and a
 softmax turns those scores into probabilities.</li>
@@ -292,7 +293,7 @@ correct answer is fed into the decoder.</p>
 <tbody>
 <tr>
 <td>Training</td>
-<td>The whole correct answer <code>&lt;Begin&gt; I have a cat</code>, shifted right by one</td>
+<td>The whole correct answer <code>&lt;Begin&gt; She likes red apples</code>, shifted right by one</td>
 <td>All 5 positions are computed <strong>in parallel</strong>, in one pass</td>
 <td>The causal mask</td>
 </tr>
@@ -332,7 +333,7 @@ vectors. In the Transformer paper the table is <strong>trained from scratch toge
 <p><strong>“Word” really means token.</strong> I say “word” for convenience. The model’s input unit is a token,
 produced by a tokenizer that cuts text into sub-words. The paper uses byte-pair encoding (BPE)
 with one vocabulary of about 37000 tokens shared by English and German. A rare word may become
-two or three tokens, and a common phrase may become one. “我有一只猫” is not necessarily 4 tokens
+two or three tokens, and a common phrase may become one. “她喜欢红苹果” is not necessarily 4 tokens
 under every tokenizer. Every n below counts tokens, not characters.</p>
 <p>The paper has two details that are easy to miss.</p>
 <ul>
@@ -396,8 +397,8 @@ relative position enters the attention score directly and takes no embedding dim
 the idea of dimensions turning at different speeds and replaces addition with rotation.</p>
 <h2 id="3-Self-attention">3. Self-attention</h2>
 <p>Self-attention lets each token look at all the others and collect their information, weighted by
-how relevant each is. The result is a new vector for each token that mixes in context. For the
-word “it”, attention can pull more information from “cat”.</p>
+how relevant each is. The result is a new vector for each token that mixes in context. In
+“The cat sat because it was tired”, attention can let the word “it” pull more information from “cat”.</p>
 <h3 id="3-1-The-intuition-behind-Q-K-and-V">3.1 The intuition behind Q, K and V</h3>
 <p>Think of a library search. These are the three matrices:</p>
 <ul>
@@ -473,8 +474,8 @@ self-attention. The results are glued back into 512 dimensions and passed throug
 map. The total compute is about that of one 512-dimensional head, but the model can look at the
 relations between tokens from 8 angles at once.</p>
 <h3 id="4-1-Why-several-heads">4.1 Why several heads</h3>
-<p>Two tokens usually relate in more than one way. In “我有一只猫” one can imagine a head for the
-subject-verb relation (我 to 有), one for the measure-word pairing (一只 to 猫), and one for
+<p>Two tokens usually relate in more than one way. In “她喜欢红苹果” one can imagine a head for the
+subject-verb relation (她 to 喜欢), one for the adjective-noun pairing (红 to 苹果), and one for
 neighbouring tokens. This is an illustration, not a finding: what each head of a real model
 learns can only be found out by dedicated analysis, and the division of labour is rarely this
 clean. A single attention gives one set of weights, like looking with one eye. Several heads give
@@ -623,11 +624,11 @@ K and V come from the encoder’s memory.</li>
 <li><strong>Feed forward.</strong> The same as in the encoder.</li>
 </ol>
 <h3 id="6-1-The-first-sub-layer-the-causal-mask">6.1 The first sub-layer: the causal mask</h3>
-<p>In training, the whole answer <code>&lt;Begin&gt; I have a cat</code> goes in at once (positions 0 to 4). Position
+<p>In training, the whole answer <code>&lt;Begin&gt; She likes red apples</code> goes in at once (positions 0 to 4). Position
 i has to predict token i + 1. If it could see the tokens on its right, it would simply be reading
 the answer. The causal mask (also called the subsequent mask) hides them.</p>
 <p>The mask is a lower-triangular matrix. 1 means “may look”, 0 means “hidden”:</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">     0  1  2  3  4   &lt;- the token being looked at</span><br><span class="line">0  [ 1  0  0  0  0 ]   &lt;Begin&gt; sees only itself</span><br><span class="line">1  [ 1  1  0  0  0 ]   I sees &lt;Begin&gt; and I</span><br><span class="line">2  [ 1  1  1  0  0 ]   have sees 0 to 2</span><br><span class="line">3  [ 1  1  1  1  0 ]</span><br><span class="line">4  [ 1  1  1  1  1 ]   cat sees everything</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">     0  1  2  3  4   &lt;- the token being looked at</span><br><span class="line">0  [ 1  0  0  0  0 ]   &lt;Begin&gt; sees only itself</span><br><span class="line">1  [ 1  1  0  0  0 ]   She sees &lt;Begin&gt; and She</span><br><span class="line">2  [ 1  1  1  0  0 ]   likes sees 0 to 2</span><br><span class="line">3  [ 1  1  1  1  0 ]</span><br><span class="line">4  [ 1  1  1  1  1 ]   apples sees everything</span><br></pre></td></tr></table></figure>
 <p>A degenerate case helps. Normalise each row of this matrix by the number of ones in it, and
 multiply by V: each token ends up with the average of itself and everything to its left. Attention
 only replaces these uniform weights with weights learned from Q and K. The shape of the mask does
@@ -688,7 +689,7 @@ embedding (Section 2.1; <code>tie_weights</code> in Section 7.1 turns that on).<
 <li><strong>Softmax.</strong> Turn the logits into probabilities. The most probable token in row i is the
 prediction for token i + 1.</li>
 </ol>
-<p>In training, the 5 rows for positions 0 to 4 give 5 predictions at once: “I”, “have”, “a”, “cat”
+<p>In training, the 5 rows for positions 0 to 4 give 5 predictions at once: “She”, “likes”, “red”, “apples”
 and <code>&lt;end&gt;</code>. Each is compared with the answer to compute the loss.</p>
 <figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Generator</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, d_model, vocab</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.proj = nn.Linear(d_model, vocab)                                  <span class="comment"># d_model -&gt; vocabulary size</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.proj(x).log_softmax(dim=-<span class="number">1</span>)                                <span class="comment"># log-probabilities</span></span><br></pre></td></tr></table></figure>
 <p>It returns log-probabilities because they are numerically more stable than probabilities.</p>
@@ -719,17 +720,17 @@ the other is the answer to predict:</p>
 <tr>
 <td>Decoder input</td>
 <td><code>&lt;Begin&gt;</code></td>
-<td>I</td>
-<td>have</td>
-<td>a</td>
-<td>cat</td>
+<td>She</td>
+<td>likes</td>
+<td>red</td>
+<td>apples</td>
 </tr>
 <tr>
 <td>Prediction target</td>
-<td>I</td>
-<td>have</td>
-<td>a</td>
-<td>cat</td>
+<td>She</td>
+<td>likes</td>
+<td>red</td>
+<td>apples</td>
 <td><code>&lt;end&gt;</code></td>
 </tr>
 </tbody>
