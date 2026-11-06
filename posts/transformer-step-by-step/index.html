@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="A walk through the encoder-decoder Transformer of &quot;Attention Is All You Need&quot;: what each part computes, the shape of every tensor, and why training and inference differ. The single-file PyTorch implem">
+<meta property="og:type" content="article">
+<meta property="og:title" content="The original Transformer, step by step, with a single-file implementation and its self-tests">
+<meta property="og:url" content="https://rockyshi.dev/posts/transformer-step-by-step/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="A walk through the encoder-decoder Transformer of &quot;Attention Is All You Need&quot;: what each part computes, the shape of every tensor, and why training and inference differ. The single-file PyTorch implem">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/architecture.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/positional_encoding.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/attention_shapes.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/multihead_split.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/causal_mask.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/transformer-step-by-step/variants.svg">
+<meta property="article:published_time" content="2026-11-06T05:55:01.000Z">
+<meta property="article:modified_time" content="2026-11-06T05:55:01.713Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="PyTorch">
+<meta property="article:tag" content="Transformer">
+<meta property="article:tag" content="attention">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/transformer-step-by-step/architecture.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/transformer-step-by-step/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/transformer-step-by-step/","path":"posts/transformer-step-by-step/","title":"The original Transformer, step by step, with a single-file implementation and its self-tests"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>The original Transformer, step by step, with a single-file implementation and its self-tests | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li><li class="menu-item menu-item-book"><a href="https://book.rockyshi.dev/" rel="section" target="_blank"><i class="fa fa-book fa-fw"></i>book</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#1-The-overall-structure"><span class="nav-number">1.</span> <span class="nav-text">1. The overall structure</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-1-One-translation-end-to-end"><span class="nav-number">1.1.</span> <span class="nav-text">1.1 One translation, end to end</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#1-2-Training-and-inference-differ"><span class="nav-number">1.2.</span> <span class="nav-text">1.2 Training and inference differ</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#1-3-The-code-skeleton"><span class="nav-number">1.3.</span> <span class="nav-text">1.3 The code skeleton</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#2-The-input"><span class="nav-number">2.</span> <span class="nav-text">2. The input</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#2-1-Token-embedding"><span class="nav-number">2.1.</span> <span class="nav-text">2.1 Token embedding</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-2-Position-embedding-position-encoding"><span class="nav-number">2.2.</span> <span class="nav-text">2.2 Position embedding (position encoding)</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#3-Self-attention"><span class="nav-number">3.</span> <span class="nav-text">3. Self-attention</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#3-1-The-intuition-behind-Q-K-and-V"><span class="nav-number">3.1.</span> <span class="nav-text">3.1 The intuition behind Q, K and V</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-2-Computing-Q-K-and-V"><span class="nav-number">3.2.</span> <span class="nav-text">3.2 Computing Q, K and V</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-3-The-output-of-self-attention"><span class="nav-number">3.3.</span> <span class="nav-text">3.3 The output of self-attention</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-4-Why-divide-by-%E2%88%9Ad-k"><span class="nav-number">3.4.</span> <span class="nav-text">3.4 Why divide by √d_k</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-5-Code"><span class="nav-number">3.5.</span> <span class="nav-text">3.5 Code</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#4-Multi-head-attention"><span class="nav-number">4.</span> <span class="nav-text">4. Multi-head attention</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#4-1-Why-several-heads"><span class="nav-number">4.1.</span> <span class="nav-text">4.1 Why several heads</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-2-How-the-dimensions-are-split"><span class="nav-number">4.2.</span> <span class="nav-text">4.2 How the dimensions are split</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4-3-Code-one-projection-then-a-split-into-8"><span class="nav-number">4.3.</span> <span class="nav-text">4.3 Code: one projection, then a split into 8</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#5-The-encoder"><span class="nav-number">5.</span> <span class="nav-text">5. The encoder</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#5-1-Add-the-residual-connection"><span class="nav-number">5.1.</span> <span class="nav-text">5.1 Add: the residual connection</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-2-Norm-layer-normalisation"><span class="nav-number">5.2.</span> <span class="nav-text">5.2 Norm: layer normalisation</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-3-Post-LN-and-Pre-LN-where-the-LayerNorm-goes"><span class="nav-number">5.3.</span> <span class="nav-text">5.3 Post-LN and Pre-LN: where the LayerNorm goes</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-4-Feed-forward-the-position-wise-network"><span class="nav-number">5.4.</span> <span class="nav-text">5.4 Feed forward: the position-wise network</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-5-The-padding-mask-the-other-kind-of-mask"><span class="nav-number">5.5.</span> <span class="nav-text">5.5 The padding mask: the other kind of mask</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#5-6-Assembling-the-encoder"><span class="nav-number">5.6.</span> <span class="nav-text">5.6 Assembling the encoder</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#6-The-decoder"><span class="nav-number">6.</span> <span class="nav-text">6. The decoder</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#6-1-The-first-sub-layer-the-causal-mask"><span class="nav-number">6.1.</span> <span class="nav-text">6.1 The first sub-layer: the causal mask</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-2-The-second-sub-layer-cross-attention"><span class="nav-number">6.2.</span> <span class="nav-text">6.2 The second sub-layer: cross-attention</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-3-Assembling-the-decoder"><span class="nav-number">6.3.</span> <span class="nav-text">6.3 Assembling the decoder</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#6-4-The-output-layer-Linear-and-softmax"><span class="nav-number">6.4.</span> <span class="nav-text">6.4 The output layer: Linear and softmax</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#7-Training-and-inference"><span class="nav-number">7.</span> <span class="nav-text">7. Training and inference</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#7-1-Putting-the-model-together"><span class="nav-number">7.1.</span> <span class="nav-text">7.1 Putting the model together</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7-2-Training-Teacher-Forcing"><span class="nav-number">7.2.</span> <span class="nav-text">7.2 Training: Teacher Forcing</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7-3-Three-training-tricks"><span class="nav-number">7.3.</span> <span class="nav-text">7.3 Three training tricks</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#7-4-Inference-one-token-at-a-time"><span class="nav-number">7.4.</span> <span class="nav-text">7.4 Inference: one token at a time</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#8-Three-variants-how-this-structure-relates-to-GPT-and-BERT"><span class="nav-number">8.</span> <span class="nav-text">8. Three variants: how this structure relates to GPT and BERT</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Summary"><span class="nav-number">9.</span> <span class="nav-text">Summary</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Where-to-go-next"><span class="nav-number">10.</span> <span class="nav-text">Where to go next</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Try-it"><span class="nav-number">11.</span> <span class="nav-text">Try it</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#References"><span class="nav-number">12.</span> <span class="nav-text">References</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">13.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">12</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/transformer-step-by-step/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="The original Transformer, step by step, with a single-file implementation and its self-tests | Rocky Shi">
+      <meta itemprop="description" content="A walk through the encoder-decoder Transformer of &quot;Attention Is All You Need&quot;: what each part computes, the shape of every tensor, and why training and inference differ. The single-file PyTorch implementation that goes with it counts the paper&#39;s base model at 63 M parameters with the three weight matrices shared and 101 M without.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          The original Transformer, step by step, with a single-file implementation and its self-tests
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-11-05 21:55:01" itemprop="dateCreated datePublished" datetime="2026-11-05T21:55:01-08:00">2026-11-05</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">A walk through the encoder-decoder Transformer of "Attention Is All You Need": what each part computes, the shape of every tensor, and why training and inference differ. The single-file PyTorch implementation that goes with it counts the paper's base model at 63 M parameters with the three weight matrices shared and 101 M without.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>Most explanations of the Transformer either stop at the block diagram or jump straight to a
+production codebase. This one sits in between. It follows one tiny example, the sentence
+“我 有 一只 猫” translated to “I have a cat”, through the original encoder-decoder model of
+<a target="_blank" rel="noopener" href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> (I call it “the paper” below), and
+writes down the shape of every tensor on the way.</p>
+<p><strong>Who this is for.</strong> You write Python, you have seen a matrix multiplication and a softmax, and you
+have run a neural network. You want to know what each step of a Transformer computes.</p>
+<p><strong>What you can do after reading.</strong> Draw the whole structure and say the input and output shape of
+every sub-layer. Explain why training and inference run differently. Read, and run, a single-file
+implementation that needs only PyTorch: <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/transformer-minimal"><code>transformer_minimal.py</code></a>.
+Its self-tests check the claims in this post that a computer can check: shapes, that the causal
+mask lets nothing leak from the future, that padding changes nothing, the parameter counts, and
+a few more.</p>
+<span id="more"></span>
+<h2 id="1-The-overall-structure">1. The overall structure</h2>
+<p>The model is an encoder-decoder. The encoder reads the source sentence. The decoder writes the
+target sentence one token at a time. Each side is a stack of N = 6 identical blocks (the paper
+calls them layers).</p>
+<p>An analogy: the encoder is a reader who goes through the Chinese original again and again and
+fills the margins with notes. The decoder is a translator who, before each English word, looks at
+what has been written so far and then looks up the reader’s notes.</p>
+<h3 id="1-1-One-translation-end-to-end">1.1 One translation, end to end</h3>
+<ol>
+<li><strong>Input representation.</strong> Each of the four tokens becomes a 512-dimensional vector, and a
+position encoding is added. The result is a matrix X of shape n × 512, with n = 4.</li>
+<li><strong>Encoding.</strong> X goes through the 6 encoder blocks in turn. Every block returns a matrix of the
+same shape as its input. The output of the last block is called the <strong>memory</strong>, still 4 × 512.</li>
+<li><strong>Decoding.</strong> The decoder receives the memory and starts from the begin symbol <code>&lt;Begin&gt;</code>. At
+each step it predicts the next token: <code>&lt;Begin&gt;</code> gives “I”, <code>&lt;Begin&gt; I</code> gives “have”, and so on
+until it predicts <code>&lt;end&gt;</code>.</li>
+<li><strong>Output.</strong> A linear layer on top of the decoder maps each vector to the vocabulary size, and a
+softmax turns those scores into probabilities.</li>
+</ol>
+<p>The memory goes into <strong>every</strong> decoder block, not only the first.</p>
+<img src="/posts/transformer-step-by-step/architecture.svg" class="" title="The Transformer architecture " alt="Encoder and decoder with six blocks each; the encoder output, called memory, feeds the cross-attention sub-layer of every decoder block; Linear and softmax appear once, at the top of the decoder. The source tokens are written in pinyin.">
+<p>Data flows from the bottom up. The encoder on the left runs once and produces the memory. Each
+decoder block on the right reads the same memory through its cross-attention sub-layer.</p>
+<h3 id="1-2-Training-and-inference-differ">1.2 Training and inference differ</h3>
+<p>The flow above is inference. Training is different, and this is where many readers ask why the
+correct answer is fed into the decoder.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Decoder input</th>
+<th>How it is computed</th>
+<th>What stops it from seeing the answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Training</td>
+<td>The whole correct answer <code>&lt;Begin&gt; I have a cat</code>, shifted right by one</td>
+<td>All 5 positions are computed <strong>in parallel</strong>, in one pass</td>
+<td>The causal mask</td>
+</tr>
+<tr>
+<td>Inference</td>
+<td>Only the tokens generated so far</td>
+<td><strong>One token at a time</strong>, a loop of n steps</td>
+<td>Future tokens do not exist yet</td>
+</tr>
+</tbody>
+</table>
+<p>Feeding the correct answer during training is called <strong>Teacher Forcing</strong>. RNNs are trained with
+Teacher Forcing too, but an RNN still needs the previous step’s result before it can compute the
+next one, so it goes position by position. The Transformer has no such recurrence. Together with
+the causal mask (each position sees only itself and the tokens to its left, Section 6.1), that
+lets all positions of the sentence be computed at once. That is why training is so much faster
+than for an RNN. At inference there is no answer to feed, so generation goes step by step, as it
+does for an RNN. Section 7 gives the code for both.</p>
+<h3 id="1-3-The-code-skeleton">1.3 The code skeleton</h3>
+<p><a target="_blank" rel="noopener" href="https://nlp.seas.harvard.edu/annotated-transformer/">The Annotated Transformer</a> (Harvard NLP,
+MIT licence) splits the model into the parts used below. The code in this post is based on it,
+with four differences: Pre-LN instead of the paper’s Post-LN (Section 5.3), optional weight sharing, one
+function that builds both kinds of mask, and a label-smoothed loss written out in a few lines.
+Everything is in one file, <code>transformer_minimal.py</code>, which needs only PyTorch. The self-tests run
+on a CPU, and so does the small copy-task training run. Every code block below assumes these
+imports and token ids:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> copy, math</span><br><span class="line"><span class="keyword">import</span> torch</span><br><span class="line"><span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn</span><br><span class="line"></span><br><span class="line">PAD, BOS, EOS = <span class="number">0</span>, <span class="number">1</span>, <span class="number">2</span>   <span class="comment"># token ids used by the masks, the loss and the decoding loop</span></span><br></pre></td></tr></table></figure>
+<p>The skeleton of the whole model:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">EncoderDecoder</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, encoder, decoder, src_embed, tgt_embed, generator</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.encoder, <span class="variable language_">self</span>.decoder = encoder, decoder</span><br><span class="line">        <span class="variable language_">self</span>.src_embed, <span class="variable language_">self</span>.tgt_embed = src_embed, tgt_embed                  <span class="comment"># token embedding + position encoding</span></span><br><span class="line">        <span class="variable language_">self</span>.generator = generator                                             <span class="comment"># Linear + log-softmax</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">encode</span>(<span class="params">self, src, src_mask</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.encoder(<span class="variable language_">self</span>.src_embed(src), src_mask)                     <span class="comment"># memory</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">decode</span>(<span class="params">self, memory, src_mask, tgt, tgt_mask</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.decoder(<span class="variable language_">self</span>.tgt_embed(tgt), memory, src_mask, tgt_mask)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, src, tgt, src_mask, tgt_mask</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.decode(<span class="variable language_">self</span>.encode(src, src_mask), src_mask, tgt, tgt_mask)</span><br></pre></td></tr></table></figure>
+<h2 id="2-The-input">2. The input</h2>
+<p>The input vector of each token is x = token embedding + position embedding. Both have 512
+dimensions and are added element by element.</p>
+<h3 id="2-1-Token-embedding">2.1 Token embedding</h3>
+<p>A token embedding is a lookup table. If the vocabulary has V tokens, the table is a V × 512
+matrix and each token owns one row. Earlier systems often used pre-trained Word2Vec or GloVe
+vectors. In the Transformer paper the table is <strong>trained from scratch together with the model</strong>.</p>
+<p><strong>“Word” really means token.</strong> I say “word” for convenience. The model’s input unit is a token,
+produced by a tokenizer that cuts text into sub-words. The paper uses byte-pair encoding (BPE)
+with one vocabulary of about 37000 tokens shared by English and German. A rare word may become
+two or three tokens, and a common phrase may become one. “我有一只猫” is not necessarily 4 tokens
+under every tokenizer. Every n below counts tokens, not characters.</p>
+<p>The paper has two details that are easy to miss.</p>
+<ul>
+<li><strong>Multiplying by √d_model.</strong> The looked-up vectors are multiplied by √512 ≈ 22.6 before the
+position encoding is added. The paper does not say why. A common explanation is that it brings
+the embedding to the same scale as the position encoding, whose values lie in [-1, 1], so that
+position does not drown out meaning. Whether that holds depends on the initialisation. The code
+here uses Xavier initialisation (each weight is drawn so that its standard deviation is √(2 / (fan-in + fan-out))) for every parameter with more than one dimension. For a
+37000 × 512 table that gives a standard deviation of about 0.0073, which becomes about 0.165
+after the multiplication, still below the root mean square of the position encoding (the square root of the mean of
+its squares; a sine and a cosine of one frequency square to 1 together, so the mean is 1/2 and
+the root is about 0.707). PyTorch’s default <code>nn.Embedding</code> initialisation has a standard deviation of 1, and
+after the multiplication the embedding is far larger than the position encoding.</li>
+<li><strong>Weight sharing.</strong> The source embedding, the target embedding and the linear layer at the top of
+the decoder use one and the same matrix (paper, Section 3.4). This saves parameters and puts
+input vectors and output vectors in one space. It requires one vocabulary for both sides. The
+paper’s English-German experiments used a shared BPE vocabulary of about 37000 tokens. In a
+Chinese-to-English example the two sides have different vocabularies, so the source embedding
+cannot be shared; only the target embedding and the output layer can.</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Embeddings</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, d_model, vocab</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.lut = nn.Embedding(vocab, d_model)   <span class="comment"># lookup table, vocab x d_model</span></span><br><span class="line">        <span class="variable language_">self</span>.d_model = d_model</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):                          <span class="comment"># x: token ids, (batch, n)</span></span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.lut(x) * math.sqrt(<span class="variable language_">self</span>.d_model)</span><br></pre></td></tr></table></figure>
+<h3 id="2-2-Position-embedding-position-encoding">2.2 Position embedding (position encoding)</h3>
+<p><strong>Why it is needed.</strong> Self-attention compares every token with every other token and does not
+care about order. Without position information, “猫吃鱼” (the cat eats the fish) and “鱼吃猫” (the
+fish eats the cat) look the same to the model: a bag of words.</p>
+<p>The paper computes the position encoding directly with sine and cosine functions. Nothing is
+trained:</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><msub><mi>E</mi><mrow><mo stretchy="false">(</mo><mi>p</mi><mi>o</mi><mi>s</mi><mo separator="true">,</mo><mtext> </mtext><mn>2</mn><mi>i</mi><mo stretchy="false">)</mo></mrow></msub><mo>=</mo><mi>sin</mi><mo>⁡</mo><mrow><mo fence="true">(</mo><mfrac><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow><msup><mn>10000</mn><mrow><mn>2</mn><mi>i</mi><mi mathvariant="normal">/</mi><msub><mi>d</mi><mtext>model</mtext></msub></mrow></msup></mfrac><mo fence="true">)</mo></mrow><mo separator="true">,</mo><mspace width="2em"/><mi>P</mi><msub><mi>E</mi><mrow><mo stretchy="false">(</mo><mi>p</mi><mi>o</mi><mi>s</mi><mo separator="true">,</mo><mtext> </mtext><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></msub><mo>=</mo><mi>cos</mi><mo>⁡</mo><mrow><mo fence="true">(</mo><mfrac><mrow><mi>p</mi><mi>o</mi><mi>s</mi></mrow><msup><mn>10000</mn><mrow><mn>2</mn><mi>i</mi><mi mathvariant="normal">/</mi><msub><mi>d</mi><mtext>model</mtext></msub></mrow></msup></mfrac><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">PE_{(pos,\,2i)} = \sin\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right), \qquad
+PE_{(pos,\,2i+1)} = \cos\left(\frac{pos}{10000^{2i/d_{\text{model}}}}\right)
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.0385em;vertical-align:-0.3552em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.5198em;margin-left:-0.0576em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mopen mtight">(</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">os</span><span class="mpunct mtight">,</span><span class="mspace mtight" style="margin-right:0.1952em;"></span><span class="mord mtight">2</span><span class="mord mathnormal mtight">i</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3552em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.854em;vertical-align:-0.704em;"></span><span class="mop">sin</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size2">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.296em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1000</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.814em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mord mathnormal mtight">i</span><span class="mord mtight">/</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.3488em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1512em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">p</span><span class="mord mathnormal">os</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.704em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size2">)</span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.5198em;margin-left:-0.0576em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mopen mtight">(</span><span class="mord mathnormal mtight">p</span><span class="mord mathnormal mtight">os</span><span class="mpunct mtight">,</span><span class="mspace mtight" style="margin-right:0.1952em;"></span><span class="mord mtight">2</span><span class="mord mathnormal mtight">i</span><span class="mbin mtight">+</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3552em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.854em;vertical-align:-0.704em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size2">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.296em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1000</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.814em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mord mathnormal mtight">i</span><span class="mord mtight">/</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.3488em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1512em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">p</span><span class="mord mathnormal">os</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.704em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size2">)</span></span></span></span></span></span></span></p>
+<p>Here pos is the position of the token in the sentence (0, 1, 2, …), i runs from 0 to
+d_model/2 − 1, even dimensions use sine and odd dimensions use cosine.</p>
+<p><strong>An intuition.</strong> Think of a row of clock hands that turn at different speeds. Dimensions 0 and 1
+turn fastest, with a period of about 6.3 positions. Higher dimensions turn more slowly. For the
+paper’s d_model = 512 the periods of dimensions 0, 16, 64, 256 and 510 are 6.3, 8.4, 19.9, 628 and
+about 60,600 positions. Each position gets a combination of hand angles that no other position
+has, the way seconds, minutes and hours together name a time of day.</p>
+<img src="/posts/transformer-step-by-step/positional_encoding.svg" class="" title="Position encoding for four dimensions " alt="Sine curves of dimensions 0, 16, 64 and 256 over positions 0 to 40: low dimensions turn fast and high dimensions turn slowly.">
+<p>The horizontal axis is the position of the token. Each curve is one of the 512 dimensions. Cut
+the plot vertically at any position and the values you read are the encoding of that position. The
+fast curves tell neighbouring tokens apart, and the slow curves tell distant tokens apart.</p>
+<p><strong>What this design buys.</strong></p>
+<ul>
+<li><strong>Relative positions are easy to compute.</strong> By the angle-addition formulas of trigonometry,
+PE(pos + k) is a <strong>linear transformation</strong> of PE(pos), and the matrix depends only on the offset
+k. The paper’s authors hypothesised that this helps the model attend by relative position.</li>
+<li><strong>Longer sentences are possible in principle.</strong> The formula works for any pos. In practice,
+quality still drops clearly when the length is far beyond that of the training set.</li>
+<li>The paper also tried learned position embeddings and got nearly identical results (its
+Table 3, row E). It chose the sinusoidal version because it may let the model extrapolate to
+longer sequences.</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">PositionalEncoding</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, d_model, dropout, max_len=<span class="number">5000</span></span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.dropout = nn.Dropout(p=dropout)</span><br><span class="line">        pe = torch.zeros(max_len, d_model)</span><br><span class="line">        position = torch.arange(<span class="number">0</span>, max_len).unsqueeze(<span class="number">1</span>)                       <span class="comment"># pos</span></span><br><span class="line">        div_term = torch.exp(torch.arange(<span class="number">0</span>, d_model, <span class="number">2</span>) * -(math.log(<span class="number">10000.0</span>) / d_model))  <span class="comment"># 1 / 10000^(2i/d)</span></span><br><span class="line">        pe[:, <span class="number">0</span>::<span class="number">2</span>] = torch.sin(position * div_term)                           <span class="comment"># even dimensions</span></span><br><span class="line">        pe[:, <span class="number">1</span>::<span class="number">2</span>] = torch.cos(position * div_term)                           <span class="comment"># odd dimensions</span></span><br><span class="line">        <span class="variable language_">self</span>.register_buffer(<span class="string">&quot;pe&quot;</span>, pe.unsqueeze(<span class="number">0</span>))                            <span class="comment"># not trained</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.dropout(x + <span class="variable language_">self</span>.pe[:, : x.size(<span class="number">1</span>)])</span><br></pre></td></tr></table></figure>
+<p><strong>What recent models use.</strong> Sinusoidal encoding adds the position to the embedding. Many recent
+models, including LLaMA, Qwen and DeepSeek, use
+<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2104.09864">RoPE (rotary position embedding, Su et al., 2021)</a> instead.
+RoPE adds nothing to x. It makes the clock hands actually turn, and applies the rotation to Q and
+K: for the token at position pos, each pair of components of its Q and K vectors is rotated by the
+angle pos·θᵢ. The dot product of two tokens then depends only on their <strong>relative distance</strong>, so
+relative position enters the attention score directly and takes no embedding dimensions. It keeps
+the idea of dimensions turning at different speeds and replaces addition with rotation.</p>
+<h2 id="3-Self-attention">3. Self-attention</h2>
+<p>Self-attention lets each token look at all the others and collect their information, weighted by
+how relevant each is. The result is a new vector for each token that mixes in context. For the
+word “it”, attention can pull more information from “cat”.</p>
+<h3 id="3-1-The-intuition-behind-Q-K-and-V">3.1 The intuition behind Q, K and V</h3>
+<p>Think of a library search. These are the three matrices:</p>
+<ul>
+<li><strong>Query:</strong> what I am looking for. The question each token asks.</li>
+<li><strong>Key:</strong> what I can offer. The label on each book’s spine.</li>
+<li><strong>Value:</strong> my actual content. What is written in the book.</li>
+</ul>
+<p>Compare one token’s query with every token’s key by dot product: the better the match, the higher
+the score. Turn the scores into weights, then add up all the values in proportion to those
+weights.</p>
+<p>Why three matrices and not x itself? Because the features used for matching and the content that
+is passed along need not be the same. Three separate projections let the model learn how to ask,
+how to be found, and what to hand over.</p>
+<h3 id="3-2-Computing-Q-K-and-V">3.2 Computing Q, K and V</h3>
+<p>The input matrix X (n × d_model) is multiplied by three learned matrices:</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>Q</mi><mo>=</mo><mi>X</mi><msup><mi>W</mi><mi>Q</mi></msup><mo separator="true">,</mo><mspace width="1em"/><mi>K</mi><mo>=</mo><mi>X</mi><msup><mi>W</mi><mi>K</mi></msup><mo separator="true">,</mo><mspace width="1em"/><mi>V</mi><mo>=</mo><mi>X</mi><msup><mi>W</mi><mi>V</mi></msup><mo separator="true">,</mo><mspace width="2em"/><msup><mi>W</mi><mi>Q</mi></msup><mo separator="true">,</mo><msup><mi>W</mi><mi>K</mi></msup><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><msub><mi>d</mi><mtext>model</mtext></msub><mo>×</mo><msub><mi>d</mi><mi>k</mi></msub></mrow></msup><mo separator="true">,</mo><mtext>  </mtext><msup><mi>W</mi><mi>V</mi></msup><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><msub><mi>d</mi><mtext>model</mtext></msub><mo>×</mo><msub><mi>d</mi><mi>v</mi></msub></mrow></msup></mrow><annotation encoding="application/x-tex">Q = XW^Q, \quad K = XW^K, \quad V = XW^V, \qquad
+W^Q, W^K \in \mathbb{R}^{d_{\text{model}} \times d_k},\; W^V \in \mathbb{R}^{d_{\text{model}} \times d_v}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">Q</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0858em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">Q</span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0858em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0715em;">K</span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0858em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.2222em;">V</span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">Q</span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0715em;">K</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0935em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8991em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.3488em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1512em;"><span></span></span></span></span></span></span><span class="mbin mtight">×</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.3488em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0315em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1512em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.2222em;">V</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8991em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8991em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3448em;"><span style="top:-2.3488em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1512em;"><span></span></span></span></span></span></span><span class="mbin mtight">×</span><span class="mord mtight"><span class="mord mathnormal mtight">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1645em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0359em;">v</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></span></p>
+<p>Every row of X, Q, K and V belongs to one token. The three W matrices start random and are updated
+by gradient descent. With a single head, d_k can equal d_model. With multiple heads, d_k = d_model / h = 64
+(Section 4).</p>
+<h3 id="3-3-The-output-of-self-attention">3.3 The output of self-attention</h3>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mi mathvariant="normal">A</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow><mo stretchy="false">(</mo><mi>Q</mi><mo separator="true">,</mo><mi>K</mi><mo separator="true">,</mo><mi>V</mi><mo stretchy="false">)</mo><mo>=</mo><mrow><mi mathvariant="normal">s</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">f</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">m</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">x</mi></mrow><mrow><mo fence="true">(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi mathvariant="normal">⊤</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo fence="true">)</mo></mrow><mi>V</mi></mrow><annotation encoding="application/x-tex">\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}\right) V
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">Attention</span></span><span class="mopen">(</span><span class="mord mathnormal">Q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.4761em;vertical-align:-0.95em;"></span><span class="mord"><span class="mord mathrm">softmax</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5261em;"><span style="top:-2.2528em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8572em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0315em;">k</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span><span style="top:-2.8172em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1828em;"><span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">⊤</span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.93em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span></span></span></span></span></p>
+<p>In computation order there are four steps, here for 4 tokens:</p>
+<ol>
+<li><strong>Score.</strong> QKᵀ gives a 4 × 4 score matrix. Entry (i, j) is how much token i attends to token j.</li>
+<li><strong>Scale.</strong> Divide by √d_k (= 8).</li>
+<li><strong>Normalise.</strong> Apply a softmax to each <strong>row</strong>, so each row becomes weights that sum to 1.</li>
+<li><strong>Weighted sum.</strong> Multiply the weight matrix by V. If row 1 of the weights is
+[0.3, 0.2, 0.2, 0.3] (an illustrative row), then z₁ = 0.3·v₁ + 0.2·v₂ + 0.2·v₃ + 0.3·v₄.</li>
+</ol>
+<img src="/posts/transformer-step-by-step/attention_shapes.svg" class="" title="Shapes inside one attention head " alt="X of 4 by 512 times three 512 by 64 matrices gives Q, K and V of 4 by 64; Q times K transposed gives 4 by 4 scores, which are scaled by 8 and passed through a row-wise softmax; the weights times V give Z of 4 by 64. Box sizes grow with the dimensions but are not to scale.">
+<p>Matrix multiplication takes the rows of the left matrix and the columns of the right one: the left
+matrix’s column count must equal the right matrix’s row count. Follow the highlighted row of the
+first token. It goes from one row of Q to one row of scores, then to one row of weights, and
+finally to one row of Z. For an animated version, <a target="_blank" rel="noopener" href="https://bbycroft.net/llm">LLM Visualization</a>
+draws the same operations as a 3D grid.</p>
+<p><strong>The cost is O(n²).</strong> The score matrix is n × n. Doubling the sentence length quadruples the
+compute and memory of this step. That is the root of why long inputs are hard for Transformers.
+Sparse attention and linear attention try to reduce the n² compute. FlashAttention is a different
+kind of method: it computes exact attention, and the compute is still O(n²). What it improves is
+memory traffic and footprint, since it no longer stores the whole n × n score matrix.</p>
+<h3 id="3-4-Why-divide-by-√d-k">3.4 Why divide by √d_k</h3>
+<p>The usual answer is “to keep the dot products from getting too large”. Here is why large values
+hurt:</p>
+<ul>
+<li>Assume the components of q and k are independent with mean 0 and variance 1. Then q·k is a sum
+of d_k terms and its <strong>variance is d_k</strong>. For d_k = 64 the standard deviation of a score is about 8.</li>
+<li>When scores differ by a lot, the softmax gives nearly all the weight to the largest one, and the
+output is close to one-hot. The softmax is saturated, its <strong>gradient is almost 0</strong>, and the model
+learns badly.</li>
+<li>Dividing by √d_k brings the variance back to 1 and keeps the softmax in a range with healthy
+gradients.</li>
+</ul>
+<h3 id="3-5-Code">3.5 Code</h3>
+<p>The Annotated Transformer implements it in a few lines. The <code>mask</code> argument is used in Section 6.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">attention</span>(<span class="params">query, key, value, mask=<span class="literal">None</span>, dropout=<span class="literal">None</span></span>):</span><br><span class="line">    d_k = query.size(-<span class="number">1</span>)</span><br><span class="line">    scores = query @ key.transpose(-<span class="number">2</span>, -<span class="number">1</span>) / math.sqrt(d_k)    <span class="comment"># score, then scale</span></span><br><span class="line">    <span class="keyword">if</span> mask <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">        scores = scores.masked_fill(mask == <span class="number">0</span>, -<span class="number">1e9</span>)           <span class="comment"># masked positions get a very small score</span></span><br><span class="line">    p_attn = scores.softmax(dim=-<span class="number">1</span>)                            <span class="comment"># softmax over each row</span></span><br><span class="line">    <span class="keyword">if</span> dropout <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">        p_attn = dropout(p_attn)</span><br><span class="line">    <span class="keyword">return</span> p_attn @ value, p_attn</span><br></pre></td></tr></table></figure>
+<h2 id="4-Multi-head-attention">4. Multi-head attention</h2>
+<p>Multi-head attention cuts the 512 dimensions into 8 slices of 64. Each slice does its own
+self-attention. The results are glued back into 512 dimensions and passed through one more linear
+map. The total compute is about that of one 512-dimensional head, but the model can look at the
+relations between tokens from 8 angles at once.</p>
+<h3 id="4-1-Why-several-heads">4.1 Why several heads</h3>
+<p>Two tokens usually relate in more than one way. In “我有一只猫” one can imagine a head for the
+subject-verb relation (我 to 有), one for the measure-word pairing (一只 to 猫), and one for
+neighbouring tokens. This is an illustration, not a finding: what each head of a real model
+learns can only be found out by dedicated analysis, and the division of labour is rarely this
+clean. A single attention gives one set of weights, like looking with one eye. Several heads give
+the model several sets at once.</p>
+<h3 id="4-2-How-the-dimensions-are-split">4.2 How the dimensions are split</h3>
+<p>The shapes for n = 4 tokens:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Operation</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Input</td>
+<td>X</td>
+<td>4 × 512</td>
+</tr>
+<tr>
+<td>Projection per head</td>
+<td>Qᵢ = XWᵢ^Q (same for K and V), Wᵢ^Q is 512 × 64</td>
+<td>4 × 64</td>
+</tr>
+<tr>
+<td>Attention per head</td>
+<td>headᵢ = Attention(Qᵢ, Kᵢ, Vᵢ)</td>
+<td>4 × 64</td>
+</tr>
+<tr>
+<td>Concatenate 8 heads</td>
+<td>Concat(head₁, …, head₈)</td>
+<td>4 × 512</td>
+</tr>
+<tr>
+<td>Output projection</td>
+<td>multiply by Wᴼ (512 × 512)</td>
+<td>4 × 512</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/transformer-step-by-step/multihead_split.svg" class="" title="Multi-head attention " alt="Q, K and V of 4 by 512 are cut by columns into 8 heads of 64 columns; each head attends separately and gives 4 by 64; the heads are concatenated to 4 by 512 and multiplied by W O, giving an output of the same shape as the input.">
+<p>In the figure, the same number from top to bottom is one head. A head works only inside its own 64
+columns, until the multiplication by Wᴼ mixes all eight.</p>
+<p>The paper’s formula:</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mi mathvariant="normal">M</mi><mi mathvariant="normal">u</mi><mi mathvariant="normal">l</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">H</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">d</mi></mrow><mo stretchy="false">(</mo><mi>Q</mi><mo separator="true">,</mo><mi>K</mi><mo separator="true">,</mo><mi>V</mi><mo stretchy="false">)</mo><mo>=</mo><mrow><mi mathvariant="normal">C</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">c</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">t</mi></mrow><mo stretchy="false">(</mo><msub><mrow><mi mathvariant="normal">h</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">d</mi></mrow><mn>1</mn></msub><mo separator="true">,</mo><mo>…</mo><mo separator="true">,</mo><msub><mrow><mi mathvariant="normal">h</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">d</mi></mrow><mi>h</mi></msub><mo stretchy="false">)</mo><mtext> </mtext><msup><mi>W</mi><mi>O</mi></msup><mo separator="true">,</mo><mspace width="2em"/><msub><mrow><mi mathvariant="normal">h</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">d</mi></mrow><mi>i</mi></msub><mo>=</mo><mrow><mi mathvariant="normal">A</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">n</mi><mi mathvariant="normal">t</mi><mi mathvariant="normal">i</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">n</mi></mrow><mo stretchy="false">(</mo><mi>Q</mi><msubsup><mi>W</mi><mi>i</mi><mi>Q</mi></msubsup><mo separator="true">,</mo><mtext> </mtext><mi>K</mi><msubsup><mi>W</mi><mi>i</mi><mi>K</mi></msubsup><mo separator="true">,</mo><mtext> </mtext><mi>V</mi><msubsup><mi>W</mi><mi>i</mi><mi>V</mi></msubsup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\mathrm{MultiHead}(Q,K,V) = \mathrm{Concat}(\mathrm{head}_1, \dots, \mathrm{head}_h)\,W^O, \qquad
+\mathrm{head}_i = \mathrm{Attention}(QW_i^Q,\, KW_i^K,\, VW_i^V)
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">MultiHead</span></span><span class="mopen">(</span><span class="mord mathnormal">Q</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1413em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">Concat</span></span><span class="mopen">(</span><span class="mord"><span class="mord"><span class="mord mathrm">head</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner">…</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord"><span class="mord mathrm">head</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">h</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">O</span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord"><span class="mord mathrm">head</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.2361em;vertical-align:-0.2769em;"></span><span class="mord"><span class="mord mathrm">Attention</span></span><span class="mopen">(</span><span class="mord mathnormal">Q</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9592em;"><span style="top:-2.4231em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span><span style="top:-3.1809em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">Q</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2769em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-2.453em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0715em;">K</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8913em;"><span style="top:-2.453em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.2222em;">V</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.247em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></p>
+<p><strong>What Wᴼ does.</strong> Concatenation only puts the eight results side by side, so the heads have not
+yet exchanged anything. Wᴼ mixes them, so that what different heads found can be combined. Its
+output has the same shape as the input X, which is what lets the residual connection (Section 5.1)
+add the two.</p>
+<p>Two things that are easy to misread:</p>
+<ul>
+<li><strong>Heads are not layers.</strong> The 8 heads run <strong>in parallel</strong>. They are not stacked.</li>
+<li><strong>The input is not always the same X.</strong> In the decoder’s cross-attention, Q comes from one place
+and K and V from another (Section 6). So the accurate statement is that Q, K and V each go
+through h projections.</li>
+</ul>
+<h3 id="4-3-Code-one-projection-then-a-split-into-8">4.3 Code: one projection, then a split into 8</h3>
+<p>The paper describes 8 small projection matrices. Code usually applies <strong>one</strong> 512 × 512 matrix and
+cuts the result into 8 slices. The two are mathematically the same: cutting the big matrix by
+columns gives eight 512 × 64 matrices. It is written this way so the GPU does it in one go.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">MultiHeadedAttention</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, h, d_model, dropout=<span class="number">0.1</span></span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="keyword">assert</span> d_model % h == <span class="number">0</span></span><br><span class="line">        <span class="variable language_">self</span>.d_k, <span class="variable language_">self</span>.h = d_model // h, h</span><br><span class="line">        <span class="variable language_">self</span>.linears = nn.ModuleList([nn.Linear(d_model, d_model) <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">4</span>)])   <span class="comment"># W^Q, W^K, W^V, W^O</span></span><br><span class="line">        <span class="variable language_">self</span>.attn = <span class="literal">None</span></span><br><span class="line">        <span class="variable language_">self</span>.dropout = nn.Dropout(p=dropout)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, query, key, value, mask=<span class="literal">None</span></span>):</span><br><span class="line">        <span class="keyword">if</span> mask <span class="keyword">is</span> <span class="keyword">not</span> <span class="literal">None</span>:</span><br><span class="line">            mask = mask.unsqueeze(<span class="number">1</span>)                           <span class="comment"># the same mask for every head</span></span><br><span class="line">        B = query.size(<span class="number">0</span>)</span><br><span class="line">        <span class="comment"># 1) one projection, then split into h heads: (B, n, d_model) -&gt; (B, h, n, d_k)</span></span><br><span class="line">        query, key, value = [</span><br><span class="line">            lin(x).view(B, -<span class="number">1</span>, <span class="variable language_">self</span>.h, <span class="variable language_">self</span>.d_k).transpose(<span class="number">1</span>, <span class="number">2</span>)</span><br><span class="line">            <span class="keyword">for</span> lin, x <span class="keyword">in</span> <span class="built_in">zip</span>(<span class="variable language_">self</span>.linears, (query, key, value))</span><br><span class="line">        ]</span><br><span class="line">        <span class="comment"># 2) all heads attend in parallel</span></span><br><span class="line">        x, <span class="variable language_">self</span>.attn = attention(query, key, value, mask=mask, dropout=<span class="variable language_">self</span>.dropout)</span><br><span class="line">        <span class="comment"># 3) concatenate: (B, h, n, d_k) -&gt; (B, n, d_model)</span></span><br><span class="line">        x = x.transpose(<span class="number">1</span>, <span class="number">2</span>).contiguous().view(B, -<span class="number">1</span>, <span class="variable language_">self</span>.h * <span class="variable language_">self</span>.d_k)</span><br><span class="line">        <span class="comment"># 4) multiply by W^O</span></span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.linears[-<span class="number">1</span>](x)</span><br></pre></td></tr></table></figure>
+<h2 id="5-The-encoder">5. The encoder</h2>
+<p>Each encoder block has two sub-layers: multi-head self-attention and a feed-forward network. Each
+sub-layer is wrapped in a residual connection and a LayerNorm, the “Add &amp; Norm” of the diagram.</p>
+<h3 id="5-1-Add-the-residual-connection">5.1 Add: the residual connection</h3>
+<p>A residual connection adds the sub-layer’s input to its output: x + Sublayer(x). It opens a direct
+lane for information and for gradients. If a sub-layer has learned nothing useful yet, the
+original information still passes through unchanged, and in backpropagation the gradient flows
+straight back to earlier layers. Without it, deep stacks of layers are hard to train.</p>
+<p>It is also why every sub-layer must return the same dimension as its input (512 here): otherwise
+the two could not be added.</p>
+<p>Another useful way to look at it: the chain of “x plus something, plus something” through the
+layers is a shared channel. Every attention and feed-forward sub-layer reads from the channel once
+and adds its result back. Layers do not connect to each other directly; everything goes through
+the channel. This view is the source of the term “residual stream” in
+<a target="_blank" rel="noopener" href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a>.
+It fits Pre-LN (Section 5.3) better: in the paper’s Post-LN the channel is normalised again after
+every sub-layer, so it is rescaled each time.</p>
+<h3 id="5-2-Norm-layer-normalisation">5.2 Norm: layer normalisation</h3>
+<p>LayerNorm normalises <strong>the 512 numbers of one token by themselves</strong>: subtract their mean, divide
+by their standard deviation (in the implementation √(variance + ε), where ε is a tiny constant that
+prevents division by zero), then multiply by a learned scale γ and add a learned shift β. It does
+not involve the other sentences of the batch or the other tokens, so it does not depend on batch
+size or sentence length, which suits variable-length sequences.</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mi mathvariant="normal">L</mi><mi mathvariant="normal">a</mi><mi mathvariant="normal">y</mi><mi mathvariant="normal">e</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">N</mi><mi mathvariant="normal">o</mi><mi mathvariant="normal">r</mi><mi mathvariant="normal">m</mi></mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mi>γ</mi><mo>⊙</mo><mfrac><mrow><mi>x</mi><mo>−</mo><mi>μ</mi></mrow><msqrt><mrow><msup><mi>σ</mi><mn>2</mn></msup><mo>+</mo><mi>ϵ</mi></mrow></msqrt></mfrac><mo>+</mo><mi>β</mi><mo separator="true">,</mo><mspace width="2em"/><mi>μ</mi><mo separator="true">,</mo><msup><mi>σ</mi><mn>2</mn></msup><mtext> are the mean and variance of the 512 components of </mtext><mi>x</mi></mrow><annotation encoding="application/x-tex">\mathrm{LayerNorm}(x) = \gamma \odot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta, \qquad
+\mu, \sigma^2 \text{ are the mean and variance of the 512 components of } x
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">LayerNorm</span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0556em;">γ</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⊙</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:2.1903em;vertical-align:-0.93em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.2603em;"><span style="top:-2.1966em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9134em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">ϵ</span></span></span><span style="top:-2.8734em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1266em;"><span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">μ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.93em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0585em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">μ</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord text"><span class="mord"> are the mean and variance of the 512 components of </span></span><span class="mord mathnormal">x</span></span></span></span></span></p>
+<h3 id="5-3-Post-LN-and-Pre-LN-where-the-LayerNorm-goes">5.3 Post-LN and Pre-LN: where the LayerNorm goes</h3>
+<p>The LayerNorm can come after the sub-layer or before it. Both are common.</p>
+<ul>
+<li><strong>Post-LN:</strong> add, then normalise: LayerNorm(x + Dropout(Sublayer(x))). The paper uses this.</li>
+<li><strong>Pre-LN:</strong> normalise, then run the sub-layer: x + Dropout(Sublayer(LayerNorm(x))), plus one more
+LayerNorm at the very end of the encoder and of the decoder. The Annotated Transformer and the
+code in this post use this.</li>
+</ul>
+<p><a target="_blank" rel="noopener" href="https://arxiv.org/abs/2002.04745">Xiong et al. (ICML 2020)</a> explain the difference theoretically.
+At initialisation, the gradients of Post-LN near the output layer are large, and learning-rate
+warm-up is needed to keep them in check. The gradients of Pre-LN are well behaved from the start,
+and warm-up can be dropped. GPT-2 moved the LayerNorm to the input of each sub-block.</p>
+<p>The encoder and decoder code below is Pre-LN. To switch to Post-LN you also remove the final
+<code>nn.LayerNorm</code> at the end of the encoder and of the decoder, because every sub-layer already
+ends with a normalisation.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">SublayerConnectionPostLN</span>(nn.Module):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;The paper: LayerNorm(x + Dropout(Sublayer(x))).&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, size, dropout</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.norm = nn.LayerNorm(size)</span><br><span class="line">        <span class="variable language_">self</span>.dropout = nn.Dropout(dropout)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, sublayer</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.norm(x + <span class="variable language_">self</span>.dropout(sublayer(x)))</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">SublayerConnection</span>(nn.Module):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Pre-LN: x + Dropout(Sublayer(LayerNorm(x))). The encoder and the decoder then end with one more LayerNorm.&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, size, dropout</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.norm = nn.LayerNorm(size)</span><br><span class="line">        <span class="variable language_">self</span>.dropout = nn.Dropout(dropout)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, sublayer</span>):</span><br><span class="line">        <span class="keyword">return</span> x + <span class="variable language_">self</span>.dropout(sublayer(<span class="variable language_">self</span>.norm(x)))</span><br></pre></td></tr></table></figure>
+<h3 id="5-4-Feed-forward-the-position-wise-network">5.4 Feed forward: the position-wise network</h3>
+<p>Two fully connected layers with a ReLU between them. The inner size in the paper is <strong>2048</strong>: the
+512 dimensions are widened by a factor of 4 and then squeezed back to 512.</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mi mathvariant="normal">F</mi><mi mathvariant="normal">F</mi><mi mathvariant="normal">N</mi></mrow><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mi>max</mi><mo>⁡</mo><mo stretchy="false">(</mo><mn>0</mn><mo separator="true">,</mo><mtext>  </mtext><mi>x</mi><msub><mi>W</mi><mn>1</mn></msub><mo>+</mo><msub><mi>b</mi><mn>1</mn></msub><mo stretchy="false">)</mo><mtext> </mtext><msub><mi>W</mi><mn>2</mn></msub><mo>+</mo><msub><mi>b</mi><mn>2</mn></msub><mo separator="true">,</mo><mspace width="2em"/><msub><mi>W</mi><mn>1</mn></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>512</mn><mo>×</mo><mn>2048</mn></mrow></msup><mo separator="true">,</mo><mtext>  </mtext><msub><mi>W</mi><mn>2</mn></msub><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mn>2048</mn><mo>×</mo><mn>512</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\mathrm{FFN}(x) = \max(0,\; xW_1 + b_1)\,W_2 + b_2, \qquad
+W_1 \in \mathbb{R}^{512 \times 2048},\; W_2 \in \mathbb{R}^{2048 \times 512}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">FFN</span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">max</span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">x</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">b</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">b</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.0585em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">512</span><span class="mbin mtight">×</span><span class="mord mtight">2048</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8641em;"></span><span class="mord"><span class="mord mathbb">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2048</span><span class="mbin mtight">×</span><span class="mord mtight">512</span></span></span></span></span></span></span></span></span></span></span></span></span></p>
+<p>“Position-wise” means each token goes through the network <strong>on its own</strong>; tokens do not talk to
+each other, but all positions share the same parameters. A way to remember the division of labour:
+attention exchanges information between tokens, and the feed-forward network lets each token
+digest what it received. In one encoder block of the paper’s base size, the feed-forward network
+has 2.10 M parameters and attention has 1.05 M, so the feed-forward network is 67%, two thirds.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">PositionwiseFeedForward</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, d_model, d_ff, dropout=<span class="number">0.1</span></span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.w_1 = nn.Linear(d_model, d_ff)</span><br><span class="line">        <span class="variable language_">self</span>.w_2 = nn.Linear(d_ff, d_model)</span><br><span class="line">        <span class="variable language_">self</span>.dropout = nn.Dropout(dropout)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.w_2(<span class="variable language_">self</span>.dropout(<span class="variable language_">self</span>.w_1(x).relu()))</span><br></pre></td></tr></table></figure>
+<h3 id="5-5-The-padding-mask-the-other-kind-of-mask">5.5 The padding mask: the other kind of mask</h3>
+<p>Sentences in a batch have different lengths, so shorter ones are filled at the end with <code>&lt;pad&gt;</code> to
+make them equal. Padding positions are not real tokens and must not be attended to. The encoder’s
+attention therefore also uses a mask, which hides the <strong>columns</strong> of every <code>&lt;pad&gt;</code>. This is not the
+decoder’s causal mask. In code:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">src_mask = (src != pad_id).unsqueeze(-<span class="number">2</span>)   <span class="comment"># shape (B, 1, n), False at pad</span></span><br></pre></td></tr></table></figure>
+<h3 id="5-6-Assembling-the-encoder">5.6 Assembling the encoder</h3>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">EncoderLayer</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, size, self_attn, feed_forward, dropout</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.size = size</span><br><span class="line">        <span class="variable language_">self</span>.self_attn, <span class="variable language_">self</span>.feed_forward = self_attn, feed_forward</span><br><span class="line">        <span class="variable language_">self</span>.sublayer = nn.ModuleList([SublayerConnection(size, dropout) <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">2</span>)])</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, mask</span>):</span><br><span class="line">        x = <span class="variable language_">self</span>.sublayer[<span class="number">0</span>](x, <span class="keyword">lambda</span> x: <span class="variable language_">self</span>.self_attn(x, x, x, mask))      <span class="comment"># Q = K = V = x</span></span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.sublayer[<span class="number">1</span>](x, <span class="variable language_">self</span>.feed_forward)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Encoder</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, layer, N</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.layers = nn.ModuleList([copy.deepcopy(layer) <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(N)])</span><br><span class="line">        <span class="variable language_">self</span>.norm = nn.LayerNorm(layer.size)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, mask</span>):</span><br><span class="line">        <span class="keyword">for</span> layer <span class="keyword">in</span> <span class="variable language_">self</span>.layers:</span><br><span class="line">            x = layer(x, mask)</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.norm(x)                                                    <span class="comment"># this is the memory</span></span><br></pre></td></tr></table></figure>
+<h2 id="6-The-decoder">6. The decoder</h2>
+<p>Each decoder block has <strong>three</strong> sub-layers, each with its own Add &amp; Norm:</p>
+<ol>
+<li><strong>Masked multi-head self-attention.</strong> The target tokens look at one another, but each sees only
+itself and the tokens on its left.</li>
+<li><strong>Cross-attention (encoder-decoder attention).</strong> Q comes from the output of the sub-layer below;
+K and V come from the encoder’s memory.</li>
+<li><strong>Feed forward.</strong> The same as in the encoder.</li>
+</ol>
+<h3 id="6-1-The-first-sub-layer-the-causal-mask">6.1 The first sub-layer: the causal mask</h3>
+<p>In training, the whole answer <code>&lt;Begin&gt; I have a cat</code> goes in at once (positions 0 to 4). Position
+i has to predict token i + 1. If it could see the tokens on its right, it would simply be reading
+the answer. The causal mask (also called the subsequent mask) hides them.</p>
+<p>The mask is a lower-triangular matrix. 1 means “may look”, 0 means “hidden”:</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">     0  1  2  3  4   &lt;- the token being looked at</span><br><span class="line">0  [ 1  0  0  0  0 ]   &lt;Begin&gt; sees only itself</span><br><span class="line">1  [ 1  1  0  0  0 ]   I sees &lt;Begin&gt; and I</span><br><span class="line">2  [ 1  1  1  0  0 ]   have sees 0 to 2</span><br><span class="line">3  [ 1  1  1  1  0 ]</span><br><span class="line">4  [ 1  1  1  1  1 ]   cat sees everything</span><br></pre></td></tr></table></figure>
+<p>A degenerate case helps. Normalise each row of this matrix by the number of ones in it, and
+multiply by V: each token ends up with the average of itself and everything to its left. Attention
+only replaces these uniform weights with weights learned from Q and K. The shape of the mask does
+not change.</p>
+<p><strong>How the matrix is applied is what matters.</strong> Set the scores at hidden positions to <strong>−∞</strong> (the
+code uses −10⁹), because e^(−∞) = 0 and only then are the weights after the softmax exactly 0. If
+you multiply the scores by 0 instead, the hidden scores become 0, e⁰ = 1, the softmax still gives
+them weight, and the future leaks in. One row of scores shows the difference (the row of position
+1, which may see positions 0 and 1):</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Scores of the row (the last 3 are hidden)</th>
+<th>Weights after softmax</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wrong: multiply by 0</td>
+<td>[2.0, 1.0, 0, 0, 0]</td>
+<td>[0.56, 0.21, 0.08, 0.08, 0.08]; the hidden tokens still hold 22.9%</td>
+</tr>
+<tr>
+<td>Right: set to −∞</td>
+<td>[2.0, 1.0, −∞, −∞, −∞]</td>
+<td>[0.73, 0.27, 0, 0, 0]</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/transformer-step-by-step/causal_mask.svg" class="" title="The causal mask in three steps " alt="Three 5 by 5 grids: raw scores, the upper triangle set to minus infinity, and the weights after the row-wise softmax in which the upper triangle is exactly 0 and every row sums to 1.">
+<p>Read the figure row by row. The coloured cells are the range a token can see, and it widens as you
+go down.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">subsequent_mask</span>(<span class="params">size</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Lower triangle True (may look), upper triangle False (hidden).&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">return</span> torch.triu(torch.ones(<span class="number">1</span>, size, size), diagonal=<span class="number">1</span>) == <span class="number">0</span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">make_masks</span>(<span class="params">src, tgt_in, pad_id=PAD</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;src: (B, n_src) token ids. tgt_in: (B, n_tgt) the decoder input, i.e. the target shifted right by one.</span></span><br><span class="line"><span class="string">    Returns src_mask (B, 1, n_src) and tgt_mask (B, n_tgt, n_tgt): padding mask AND causal mask.&quot;&quot;&quot;</span></span><br><span class="line">    src_mask = (src != pad_id).unsqueeze(-<span class="number">2</span>)</span><br><span class="line">    tgt_mask = (tgt_in != pad_id).unsqueeze(-<span class="number">2</span>) &amp; subsequent_mask(tgt_in.size(-<span class="number">1</span>)).to(tgt_in.device)</span><br><span class="line">    <span class="keyword">return</span> src_mask, tgt_mask</span><br></pre></td></tr></table></figure>
+<p>(<code>PAD</code> is the padding token id, defined with the imports above.) The mask the decoder actually uses is the padding
+mask AND the causal mask.</p>
+<h3 id="6-2-The-second-sub-layer-cross-attention">6.2 The second sub-layer: cross-attention</h3>
+<p>This is where the decoder looks back at the source. Its Q, K and V come from different places, so
+strictly it is <strong>not self-attention</strong> but cross-attention:</p>
+<ul>
+<li><strong>Q</strong> comes from the output of the first sub-layer (masked self-attention plus Add &amp; Norm) <strong>in
+the same decoder block</strong>. It says: “this is how far I have written, which part of the source do
+I need?”</li>
+<li><strong>K and V</strong> come from the encoder’s memory. All 6 decoder blocks use the same memory.</li>
+</ul>
+<p>This layer needs <strong>no causal mask</strong>: the source sentence is fully known, so every target token may
+look at all of it. Only the padding mask is applied, to hide the <code>&lt;pad&gt;</code> tokens of the source.</p>
+<h3 id="6-3-Assembling-the-decoder">6.3 Assembling the decoder</h3>
+<p>In <code>src_attn</code> below, Q is <code>x</code> (the output of the previous sub-layer in this block), and K and V are
+both <code>m</code> (the memory).</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">DecoderLayer</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, size, self_attn, src_attn, feed_forward, dropout</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.size = size</span><br><span class="line">        <span class="variable language_">self</span>.self_attn, <span class="variable language_">self</span>.src_attn, <span class="variable language_">self</span>.feed_forward = self_attn, src_attn, feed_forward</span><br><span class="line">        <span class="variable language_">self</span>.sublayer = nn.ModuleList([SublayerConnection(size, dropout) <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(<span class="number">3</span>)])</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, memory, src_mask, tgt_mask</span>):</span><br><span class="line">        m = memory</span><br><span class="line">        x = <span class="variable language_">self</span>.sublayer[<span class="number">0</span>](x, <span class="keyword">lambda</span> x: <span class="variable language_">self</span>.self_attn(x, x, x, tgt_mask))   <span class="comment"># causal self-attention</span></span><br><span class="line">        x = <span class="variable language_">self</span>.sublayer[<span class="number">1</span>](x, <span class="keyword">lambda</span> x: <span class="variable language_">self</span>.src_attn(x, m, m, src_mask))    <span class="comment"># Q = x, K = V = memory</span></span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.sublayer[<span class="number">2</span>](x, <span class="variable language_">self</span>.feed_forward)</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Decoder</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, layer, N</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.layers = nn.ModuleList([copy.deepcopy(layer) <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(N)])</span><br><span class="line">        <span class="variable language_">self</span>.norm = nn.LayerNorm(layer.size)</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x, memory, src_mask, tgt_mask</span>):</span><br><span class="line">        <span class="keyword">for</span> layer <span class="keyword">in</span> <span class="variable language_">self</span>.layers:</span><br><span class="line">            x = layer(x, memory, src_mask, tgt_mask)                           <span class="comment"># every layer reads the same memory</span></span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.norm(x)</span><br></pre></td></tr></table></figure>
+<h3 id="6-4-The-output-layer-Linear-and-softmax">6.4 The output layer: Linear and softmax</h3>
+<p>Two steps take the decoder output to next-token probabilities:</p>
+<ol>
+<li><strong>Linear.</strong> Map each 512-dimensional decoder output to the <strong>vocabulary size</strong> (for example
+37000). The resulting scores are called logits. This matrix can share weights with the target
+embedding (Section 2.1; <code>tie_weights</code> in Section 7.1 turns that on).</li>
+<li><strong>Softmax.</strong> Turn the logits into probabilities. The most probable token in row i is the
+prediction for token i + 1.</li>
+</ol>
+<p>In training, the 5 rows for positions 0 to 4 give 5 predictions at once: “I”, “have”, “a”, “cat”
+and <code>&lt;end&gt;</code>. Each is compared with the answer to compute the loss.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Generator</span>(nn.Module):</span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, d_model, vocab</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.proj = nn.Linear(d_model, vocab)                                  <span class="comment"># d_model -&gt; vocabulary size</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, x</span>):</span><br><span class="line">        <span class="keyword">return</span> <span class="variable language_">self</span>.proj(x).log_softmax(dim=-<span class="number">1</span>)                                <span class="comment"># log-probabilities</span></span><br></pre></td></tr></table></figure>
+<p>It returns log-probabilities because they are numerically more stable than probabilities.</p>
+<h2 id="7-Training-and-inference">7. Training and inference</h2>
+<p>So far this was structure. To run a Transformer you also need to know how it is trained and how it
+generates.</p>
+<h3 id="7-1-Putting-the-model-together">7.1 Putting the model together</h3>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">make_model</span>(<span class="params">src_vocab, tgt_vocab, N=<span class="number">6</span>, d_model=<span class="number">512</span>, d_ff=<span class="number">2048</span>, h=<span class="number">8</span>, dropout=<span class="number">0.1</span>, tie_weights=<span class="literal">False</span></span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;The paper&#x27;s base model with the defaults. tie_weights=True shares one matrix between the two embeddings and</span></span><br><span class="line"><span class="string">    the output layer (paper, section 3.4); it needs src_vocab == tgt_vocab.&quot;&quot;&quot;</span></span><br><span class="line">    c = copy.deepcopy</span><br><span class="line">    attn = MultiHeadedAttention(h, d_model, dropout)</span><br><span class="line">    ff = PositionwiseFeedForward(d_model, d_ff, dropout)</span><br><span class="line">    position = PositionalEncoding(d_model, dropout)</span><br><span class="line">    model = EncoderDecoder(</span><br><span class="line">        Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),</span><br><span class="line">        Decoder(DecoderLayer(d_model, c(attn), c(attn), c(ff), dropout), N),</span><br><span class="line">        nn.Sequential(Embeddings(d_model, src_vocab), c(position)),</span><br><span class="line">        nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),</span><br><span class="line">        Generator(d_model, tgt_vocab),</span><br><span class="line">    )</span><br><span class="line">    <span class="keyword">if</span> tie_weights:</span><br><span class="line">        <span class="keyword">assert</span> src_vocab == tgt_vocab, <span class="string">&quot;weight sharing needs one vocabulary for both sides&quot;</span></span><br><span class="line">        model.src_embed[<span class="number">0</span>].lut.weight = model.tgt_embed[<span class="number">0</span>].lut.weight</span><br><span class="line">        model.generator.proj.weight = model.tgt_embed[<span class="number">0</span>].lut.weight</span><br><span class="line">    <span class="keyword">for</span> p <span class="keyword">in</span> model.parameters():                                               <span class="comment"># Xavier initialisation</span></span><br><span class="line">        <span class="keyword">if</span> p.dim() &gt; <span class="number">1</span>:</span><br><span class="line">            nn.init.xavier_uniform_(p)</span><br><span class="line">    <span class="keyword">return</span> model</span><br></pre></td></tr></table></figure>
+<p>The paper’s base model has about 65 million parameters (its Table 3) and was trained for 12 hours
+on 8 P100 GPUs. With a 37000-token vocabulary, this code has 101.0 M parameters when the weights
+are not shared (the default). With <code>tie_weights</code> on, where the two embeddings and the output layer
+use one matrix, it has 63.1 M, close to the paper’s figure. The self-tests count both.</p>
+<h3 id="7-2-Training-Teacher-Forcing">7.2 Training: Teacher Forcing</h3>
+<p>In training the target sentence is shifted by one position. One copy is the decoder’s input and
+the other is the answer to predict:</p>
+<table>
+<thead>
+<tr>
+<th>Position</th>
+<th>0</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Decoder input</td>
+<td><code>&lt;Begin&gt;</code></td>
+<td>I</td>
+<td>have</td>
+<td>a</td>
+<td>cat</td>
+</tr>
+<tr>
+<td>Prediction target</td>
+<td>I</td>
+<td>have</td>
+<td>a</td>
+<td>cat</td>
+<td><code>&lt;end&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>This is what “Outputs (shifted right)” means in the paper’s diagram. With the causal mask, one
+forward pass computes the predictions of all 5 positions.</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">tgt_in, tgt_out = tgt[:, :-<span class="number">1</span>], tgt[:, <span class="number">1</span>:]</span><br><span class="line">src_mask, tgt_mask = make_masks(src, tgt_in, pad_id)</span><br><span class="line">log_probs = model.generator(model(src, tgt_in, src_mask, tgt_mask))</span><br><span class="line">loss = criterion(log_probs, tgt_out)</span><br></pre></td></tr></table></figure>
+<p>Here <code>tgt</code> contains <code>&lt;Begin&gt;</code> and <code>&lt;end&gt;</code>. Build <code>tgt_mask</code> from <code>tgt_in</code>, not from <code>tgt</code>, or its
+length will not match the decoder input.</p>
+<h3 id="7-3-Three-training-tricks">7.3 Three training tricks</h3>
+<p>The paper uses three.</p>
+<ul>
+<li><strong>Learning-rate warm-up.</strong> For the first 4000 steps the learning rate rises linearly, then it
+falls with the inverse square root of the step. At the start the parameters are random, and a
+large learning rate can make training diverge. The analysis of Xiong et al. in Section 5.3 points
+out that this is mainly a Post-LN problem: with Pre-LN the warm-up can be shortened or left out.
+The optimiser is Adam with β₁ = 0.9, β₂ = 0.98 and ε = 10⁻⁹.</li>
+<li><strong>Dropout = 0.1.</strong> It is applied to the output of each sub-layer (before the residual addition)
+and to the sum of embedding and position encoding. The code here also applies it to the attention
+weights.</li>
+<li><strong>Label smoothing = 0.1.</strong> The training target is not “the correct token with 100%” but “the
+correct token with about 90%, and the remaining 10% spread evenly over the whole vocabulary”. The model becomes
+less confident, perplexity gets worse, and BLEU improves.</li>
+</ul>
+<p>The learning-rate formula:</p>
+<p class="katex-block"><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>l</mi><mi>r</mi><mo>=</mo><msubsup><mi>d</mi><mtext>model</mtext><mrow><mo>−</mo><mn>0.5</mn></mrow></msubsup><mo>⋅</mo><mi>min</mi><mo>⁡</mo><mrow><mo fence="true">(</mo><mi>s</mi><mi>t</mi><mi>e</mi><msup><mi>p</mi><mrow><mo>−</mo><mn>0.5</mn></mrow></msup><mo separator="true">,</mo><mtext>  </mtext><mi>s</mi><mi>t</mi><mi>e</mi><mi>p</mi><mo>⋅</mo><mi>w</mi><mi>a</mi><mi>r</mi><mi>m</mi><mi>u</mi><msup><mi>p</mi><mrow><mo>−</mo><mn>1.5</mn></mrow></msup><mo fence="true">)</mo></mrow><mo separator="true">,</mo><mspace width="2em"/><mi>w</mi><mi>a</mi><mi>r</mi><mi>m</mi><mi>u</mi><mi>p</mi><mo>=</mo><mn>4000</mn></mrow><annotation encoding="application/x-tex">lr = d_{\text{model}}^{-0.5} \cdot \min\left(step^{-0.5},\; step \cdot warmup^{-1.5}\right), \qquad warmup = 4000
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.1555em;vertical-align:-0.2914em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-2.4086em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">0.5</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2914em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.2141em;vertical-align:-0.35em;"></span><span class="mop">min</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class="mord mathnormal">s</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord"><span class="mord mathnormal">p</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">0.5</span></span></span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">m</span><span class="mord mathnormal">u</span><span class="mord"><span class="mord mathnormal">p</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1.5</span></span></span></span></span></span></span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mord mathnormal">a</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">m</span><span class="mord mathnormal">u</span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">4000</span></span></span></span></span></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">def</span> <span class="title function_">rate</span>(<span class="params">step, model_size=<span class="number">512</span>, factor=<span class="number">1.0</span>, warmup=<span class="number">4000</span></span>):</span><br><span class="line">    step = <span class="built_in">max</span>(step, <span class="number">1</span>)                                            <span class="comment"># avoid 0 to a negative power</span></span><br><span class="line">    <span class="keyword">return</span> factor * model_size ** -<span class="number">0.5</span> * <span class="built_in">min</span>(step ** -<span class="number">0.5</span>, step * warmup ** -<span class="number">1.5</span>)</span><br></pre></td></tr></table></figure>
+<p>The label-smoothed loss is short:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">LabelSmoothingLoss</span>(nn.Module):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Cross-entropy on log-probabilities, with the target distribution (1 - eps) on the right token and eps spread</span></span><br><span class="line"><span class="string">    evenly over the vocabulary; positions whose target is padding are ignored.&quot;&quot;&quot;</span></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">__init__</span>(<span class="params">self, smoothing=<span class="number">0.1</span>, pad_id=PAD</span>):</span><br><span class="line">        <span class="built_in">super</span>().__init__()</span><br><span class="line">        <span class="variable language_">self</span>.smoothing, <span class="variable language_">self</span>.pad_id = smoothing, pad_id</span><br><span class="line"></span><br><span class="line">    <span class="keyword">def</span> <span class="title function_">forward</span>(<span class="params">self, log_probs, target</span>):                          <span class="comment"># (B, n, V), (B, n)</span></span><br><span class="line">        nll = -log_probs.gather(-<span class="number">1</span>, target.unsqueeze(-<span class="number">1</span>)).squeeze(-<span class="number">1</span>)</span><br><span class="line">        uniform = -log_probs.mean(dim=-<span class="number">1</span>)</span><br><span class="line">        loss = (<span class="number">1</span> - <span class="variable language_">self</span>.smoothing) * nll + <span class="variable language_">self</span>.smoothing * uniform</span><br><span class="line">        keep = target != <span class="variable language_">self</span>.pad_id</span><br><span class="line">        <span class="keyword">return</span> (loss * keep).<span class="built_in">sum</span>() / keep.<span class="built_in">sum</span>()</span><br></pre></td></tr></table></figure>
+<h3 id="7-4-Inference-one-token-at-a-time">7.4 Inference: one token at a time</h3>
+<p>At inference there is no answer to feed. Start from <code>&lt;Begin&gt;</code>; at every step send the whole
+sequence generated so far through the decoder and take the prediction at the <strong>last position</strong> as
+the next token. The encoder runs once, and the memory is reused at every step.</p>
+<p>The simplest strategy picks the most probable token at every step. That is <strong>greedy decoding</strong>:</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">@torch.no_grad()</span></span><br><span class="line"><span class="keyword">def</span> <span class="title function_">greedy_decode</span>(<span class="params">model, src, src_mask, max_len, start_symbol=BOS</span>):</span><br><span class="line">    <span class="string">&quot;&quot;&quot;Greedy decoding for a whole batch. The encoder runs once; the decoder re-reads everything generated so far at</span></span><br><span class="line"><span class="string">    every step (the causal mask keeps each earlier position computed as in training). Returns (B, max_len),</span></span><br><span class="line"><span class="string">    starting with &lt;Begin&gt;.&quot;&quot;&quot;</span></span><br><span class="line">    memory = model.encode(src, src_mask)</span><br><span class="line">    ys = torch.full((src.size(<span class="number">0</span>), <span class="number">1</span>), start_symbol, dtype=src.dtype)</span><br><span class="line">    <span class="keyword">for</span> _ <span class="keyword">in</span> <span class="built_in">range</span>(max_len - <span class="number">1</span>):</span><br><span class="line">        out = model.decode(memory, src_mask, ys, subsequent_mask(ys.size(<span class="number">1</span>)).to(src.device))</span><br><span class="line">        next_word = model.generator(out[:, -<span class="number">1</span>]).argmax(dim=-<span class="number">1</span>, keepdim=<span class="literal">True</span>)   <span class="comment"># last position only</span></span><br><span class="line">        ys = torch.cat([ys, next_word], dim=<span class="number">1</span>)</span><br><span class="line">    <span class="keyword">return</span> ys</span><br></pre></td></tr></table></figure>
+<p>This version always produces <code>max_len</code> tokens for the whole batch, and the caller cuts each row at
+the first <code>&lt;end&gt;</code>. A decoder for real use would stop a sequence once it emits <code>&lt;end&gt;</code>.</p>
+<p>The paper itself uses <strong>beam search</strong> with a beam of 4: at each step it keeps the 4 most probable
+partial sequences instead of 1, and in the end picks the one with the best overall score.</p>
+<p><strong>Is the mask still needed at inference?</strong> The intuitive answer, no, is half right. The code above
+recomputes all generated positions at every step, and it still passes the causal mask so that the
+earlier positions are computed exactly as in training. Modern implementations use a KV cache: they
+store the K and V of earlier positions and compute only the new token each step. Then “cannot see
+the future” holds by construction, and the mask can be dropped.</p>
+<h2 id="8-Three-variants-how-this-structure-relates-to-GPT-and-BERT">8. Three variants: how this structure relates to GPT and BERT</h2>
+<p>The paper was designed for translation, which is why it has an encoder and a decoder. Most later
+models keep only one half. By what they keep, they fall into three groups:</p>
+<table>
+<thead>
+<tr>
+<th>Variant</th>
+<th>What is kept</th>
+<th>Attention</th>
+<th>Typical models</th>
+<th>Good at</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Encoder-decoder</td>
+<td>Both halves</td>
+<td>Bidirectional in the encoder, causal in the decoder, cross-attention between</td>
+<td>The original Transformer, T5, BART, T5Gemma</td>
+<td>Translation, summarisation</td>
+</tr>
+<tr>
+<td>Encoder-only</td>
+<td>The left half</td>
+<td>Bidirectional self-attention, no causal mask</td>
+<td>BERT, RoBERTa</td>
+<td>Classification, extraction, retrieval</td>
+</tr>
+<tr>
+<td>Decoder-only</td>
+<td>The right half, without cross-attention</td>
+<td>Causal self-attention only</td>
+<td>The GPT series, LLaMA, Qwen, DeepSeek</td>
+<td>Text generation, chat</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/transformer-step-by-step/variants.svg" class="" title="Three Transformer variants " alt="Encoder-decoder keeps both halves; encoder-only keeps bidirectional self-attention and the feed-forward network and outputs one vector per token; decoder-only keeps causal self-attention and the feed-forward network, with no cross-attention.">
+<p>The three differ only in <strong>the masks and whether there is cross-attention</strong>. The computation
+inside each sub-layer is exactly what this post described. A decoder-only model translates by
+putting “source + separator + translation” into one sequence, and causal self-attention does both
+the reading and the writing, so there is no separate encoder and no memory.</p>
+<p>Take Section 6 and remove the cross-attention of Section 6.2, and you have the skeleton of GPT.
+GPT-2 and its successors also use Pre-LN, the GELU activation and learned position embeddings. Encoder-only models
+keep the encoder and use bidirectional attention, which gives one vector per token and generates
+no text. <a target="_blank" rel="noopener" href="https://bbycroft.net/llm">LLM Visualization</a> shows the decoder-only structure.</p>
+<p>Decoder-only is not the only choice. In 2025 Google released
+<a target="_blank" rel="noopener" href="https://developers.googleblog.com/en/t5gemma/">T5Gemma</a> and
+<a target="_blank" rel="noopener" href="https://blog.google/technology/developers/t5gemma-2/">T5Gemma 2</a>, which convert pre-trained
+decoder-only models back into encoder-decoder models. T5Gemma (July 2025) reports comparable or
+better quality than the decoder-only Gemma at equal inference compute. T5Gemma 2 (December 2025)
+reports better post-training results than its decoder-only counterparts, without inference-compute
+measurements. Encoder-decoder models did not leave; they are just no longer the default for large
+models.</p>
+<h2 id="Summary">Summary</h2>
+<ul>
+<li>A Transformer is an encoder and a decoder with 6 blocks each. Each block is (multi-head)
+attention and a feed-forward network, wrapped in Add &amp; Norm.</li>
+<li>Self-attention uses Q, K and V to let each token collect information from the others by
+relevance. Dividing by √d_k keeps the softmax out of its saturated range.</li>
+<li>Training uses Teacher Forcing and the causal mask to compute a whole sentence in parallel;
+inference generates one token at a time.</li>
+<li>There are two kinds of mask: the padding mask hides <code>&lt;pad&gt;</code>, and the causal mask hides tokens on
+the right. Both work by setting the score to −∞, not by multiplying by 0.</li>
+<li>Remove the cross-attention and you have the skeleton of GPT; keep only the encoder and you have
+the skeleton of BERT.</li>
+</ul>
+<h2 id="Where-to-go-next">Where to go next</h2>
+<ul>
+<li>KV cache: store K and V of earlier positions at inference and compute only the new token
+(mentioned at the end of Section 7.4).</li>
+<li>Attention memory against length: FlashAttention and related methods (Section 3.3).</li>
+<li>Modern position encodings: RoPE (end of Section 2.2).</li>
+<li>Hands on: run <code>transformer_minimal.py</code>, change N, d_model and the number of heads, and see how
+fast the copy task is learned.</li>
+</ul>
+<h2 id="Try-it">Try it</h2>
+<p><code>python transformer_minimal.py</code> first runs the self-tests described below, which print one line
+each. Then it trains a 2-layer model (d_model 64, 4 heads, weights tied, vocabulary of 12 tokens)
+on a copy task: the source is a random token sequence and the target is the same sequence. It
+prints the loss during training and the exact-match accuracy of greedy decoding on 200 new
+sequences before and after. <code>--steps</code> sets the number of training steps (400 by default). The
+self-tests print the lines below. The training that follows, on an x86 server CPU with four
+threads and PyTorch 2.13, goes from a loss of 5.49 at step 1 through 1.45, 0.75 and 0.66 at steps
+100, 200 and 300 to 0.62 at step 400, and greedy decoding then copies 99.5% of 200 new sequences
+exactly. The 400 steps take 13 seconds and the whole script under 30 seconds; two runs gave identical losses. On a 6-core ARM
+single-board computer with PyTorch 2.8 the same script reaches 98.0% (loss 0.635 at step 400); its
+400 training steps take about 35 minutes while the board is busy with other jobs. Different PyTorch versions and
+CPUs draw different random numbers, so the exact figures differ from machine to machine; the
+script stops with an error if the accuracy ends below 90%.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">self-tests</span><br><span class="line">  ok  shapes: memory (B, n_src, d), decoder output (B, n_tgt, d), log-probs (B, n_tgt, V)</span><br><span class="line">  ok  subsequent_mask(5) is the lower triangle</span><br><span class="line">  ok  causal mask: changing positions 3-4 leaves outputs at positions 0-2 unchanged</span><br><span class="line">  ok  attention weights above the diagonal are exactly 0</span><br><span class="line">  ok  padding: appending &lt;pad&gt; to the source leaves the encoder output at real positions unchanged</span><br><span class="line">  ok  multiply by 0 leaves 22.9% of the weight on hidden positions; -inf leaves 0%</span><br><span class="line">  ok  base model, vocabulary 37000: 101.0 M parameters untied, 63.1 M with the three matrices tied (paper: 65 M)</span><br><span class="line">  ok  one encoder block: feed-forward 2.10 M, attention 1.05 M (67% feed-forward)</span><br><span class="line">  ok  position-encoding periods: dim 0 -&gt; 6.3, 16 -&gt; 8.4, 64 -&gt; 19.9, 256 -&gt; 628, 510 -&gt; 60611 positions</span><br></pre></td></tr></table></figure>
+<h2 id="References">References</h2>
+<p><strong>Basics</strong></p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>: the original paper.</li>
+<li><a target="_blank" rel="noopener" href="https://nlp.seas.harvard.edu/annotated-transformer/">The Annotated Transformer</a> (Harvard NLP,
+<code>harvardnlp/annotated-transformer</code> on GitHub, MIT licence): the code in this post is based on it.</li>
+<li><a target="_blank" rel="noopener" href="https://bbycroft.net/llm">LLM Visualization</a>: every step of a decoder-only model as a 3D animation.</li>
+</ul>
+<p><strong>Further reading</strong></p>
+<ul>
+<li>Phuong and Hutter, <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2207.09238">Formal Algorithms for Transformers</a>, 2022.
+The whole Transformer in about 50 lines of pseudocode; the clearest side-by-side of the three
+variants.</li>
+<li>Xiong et al., <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2002.04745">On Layer Normalization in the Transformer Architecture</a>,
+ICML 2020. A theoretical analysis of Pre-LN and learning-rate warm-up.</li>
+<li>Su et al., <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2104.09864">RoFormer: Enhanced Transformer with Rotary Position Embedding</a>,
+2021. The RoPE paper.</li>
+<li>Elhage et al., <a target="_blank" rel="noopener" href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a>,
+Anthropic, 2021. Where the residual-stream view comes from.</li>
+</ul>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The code is at <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/transformer-minimal">rockyshi-dev/transformer-minimal</a>
+(MIT licence): <code>transformer_minimal.py</code> and a README. It needs only PyTorch and runs on a CPU: I ran it on an x86 server CPU and on a small ARM board. The
+numbers in this post that a program can produce come from its self-tests (<code>python transformer_minimal.py</code>): the parameter counts (101.0 M untied, 63.1 M tied, for the paper’s base
+size with a 37000-token vocabulary), the split of one encoder block (2.10 M in the feed-forward
+network, 1.05 M in attention), the 22.9% of weight left on hidden positions by multiplying with 0,
+and the position-encoding periods. The standard deviations in Section 2.1 follow from the Xavier
+formula for a 37000 × 512 matrix. The nine checks are:</p>
+<ol>
+<li>shapes: memory, decoder output and log-probabilities have the shapes of Sections 1 to 6;</li>
+<li>the causal mask is exactly the lower triangle;</li>
+<li>changing later decoder inputs leaves the outputs at earlier positions unchanged;</li>
+<li>the attention weights above the diagonal are exactly 0;</li>
+<li>appending <code>&lt;pad&gt;</code> to the source leaves the encoder output at real positions unchanged;</li>
+<li>setting masked scores to −∞ leaves 0% of the weight on hidden positions, multiplying them by 0
+leaves 22.9%;</li>
+<li>the parameter counts of the base model, untied and tied;</li>
+<li>the split of one encoder block into feed-forward and attention parameters;</li>
+<li>the position-encoding periods of dimensions 0, 16, 64, 256 and 510.</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/Transformer/" rel="tag"># Transformer</a>
+              <a href="/tags/attention/" rel="tag"># attention</a>
+              <a href="/tags/PyTorch/" rel="tag"># PyTorch</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/llm-decode-step-head-share/" rel="prev" title="Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token">
+                  <i class="fa fa-angle-left"></i> Where a decode step goes on an RTX 4090: in a 4-bit 7B model, the 16-bit output head is a fifth of every token
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
