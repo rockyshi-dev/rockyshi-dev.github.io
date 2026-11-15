@@ -142,13 +142,13 @@
   <nav class="site-state">
       <div class="site-state-item site-state-posts">
         <a href="/archives/">
-          <span class="site-state-item-count">12</span>
+          <span class="site-state-item-count">13</span>
           <span class="site-state-item-name">posts</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
           <a href="/tags/">
-        <span class="site-state-item-count">11</span>
+        <span class="site-state-item-count">12</span>
         <span class="site-state-item-name">tags</span></a>
       </div>
   </nav>
@@ -173,6 +173,89 @@
     </div>
 
     <div class="main-inner index posts-expand">
+
+    
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/tp-pp-72b-without-p2p/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content=" | Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          <a href="/posts/tp-pp-72b-without-p2p/" class="post-title-link" itemprop="url">TP8, TP4xPP2 or PP8? Splitting a 72B model across eight RTX 4090s without peer-to-peer</a>
+        </h2>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+
+      <time title="Created: 2026-10-17 13:12:07" itemprop="dateCreated datePublished" datetime="2026-10-17T13:12:07-07:00">2026-10-17</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-10-28 21:54:54" itemprop="dateModified" datetime="2026-10-28T21:54:54-07:00">2026-10-28</time>
+    </span>
+
+  
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+          <p>Qwen2.5-72B in bf16 needs all eight RTX 4090s of a server without GPU peer-to-peer. Pipeline parallelism gives the fastest first token at every load, tensor parallelism the shortest gap between tokens, and throughput depends on load: vLLM's "PP for higher throughput without NVLink" holds at 32 concurrent requests and fails at 8. Qwen2.5-32B on four of the cards shows the same trade-off.</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/posts/tp-pp-72b-without-p2p/">
+                Read more &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+        <div class="post-eof"></div>
+      
+    </footer>
+  </article>
+</div>
+
+
+
 
     
 
@@ -218,7 +301,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+      <time title="Modified: 2026-10-24 21:39:04" itemprop="dateModified" datetime="2026-10-24T21:39:04-07:00">2026-10-24</time>
     </span>
 
   
@@ -301,7 +384,7 @@
         <i class="far fa-calendar-check"></i>
       </span>
       <span class="post-meta-item-text">Edited on</span>
-      <time title="Modified: 2026-10-24 21:38:57" itemprop="dateModified" datetime="2026-10-24T21:38:57-07:00">2026-10-24</time>
+      <time title="Modified: 2026-10-24 21:39:04" itemprop="dateModified" datetime="2026-10-24T21:39:04-07:00">2026-10-24</time>
     </span>
 
   
