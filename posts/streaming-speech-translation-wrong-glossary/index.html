@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#222" media="(prefers-color-scheme: dark)"><meta name="generator" content="Hexo 8.1.2">
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.0/css/all.min.css" integrity="sha256-VHqXKFhhMxcpubYf9xiWdCiojEbY9NexQ4jh8AxbvcM=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"rockyshi.dev","root":"/","images":"/images","scheme":"Gemini","darkmode":true,"version":"8.29.0","exturl":false,"sidebar":{"position":"left","width_expanded":320,"width_dual_column":240,"display":"post","padding":18,"offset":12},"hljswrap":true,"codeblock":{"theme":{"light":"default","dark":"stackoverflow-dark"},"prism":{"light":"prism","dark":"prism-dark"},"copy_button":{"enable":false,"style":null},"fold":{"enable":false,"height":500},"language":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"stickytabs":false,"motion":{"enable":true,"async":false,"duration":200,"transition":{"menu_item":"fadeInDown","post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"i18n":{"placeholder":"Searching...","empty":"We didn't find any results for the search: ${query}","hits_time":"${hits} results found in ${time} ms","hits":"${hits} results found"}}</script><script src="/js/config.js" defer></script>
+
+    <meta name="description" content="I gave a speech LLM a glossary with one wrong entry and translated the same 116 English sentences into Chinese twice: offline on the full audio, and simultaneously on growing 1-second prefixes with lo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Wrong glossary terms in streaming speech translation: no more than offline">
+<meta property="og:url" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/index.html">
+<meta property="og:site_name" content="Rocky Shi">
+<meta property="og:description" content="I gave a speech LLM a glossary with one wrong entry and translated the same 116 English sentences into Chinese twice: offline on the full audio, and simultaneously on growing 1-second prefixes with lo">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/difference.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/la2-dev147.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/hypotheses.svg">
+<meta property="article:published_time" content="2026-11-19T01:34:51.000Z">
+<meta property="article:modified_time" content="2026-11-19T01:34:57.000Z">
+<meta property="article:author" content="Rocky Shi">
+<meta property="article:tag" content="LLM">
+<meta property="article:tag" content="measurement">
+<meta property="article:tag" content="speech">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/difference.svg">
+
+
+<link rel="canonical" href="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/">
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"en","comments":true,"permalink":"https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/","path":"posts/streaming-speech-translation-wrong-glossary/","title":"Wrong glossary terms in streaming speech translation: no more than offline"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>Wrong glossary terms in streaming speech translation: no more than offline | Rocky Shi</title>
+  
+
+
+
+
+
+
+
+
+  
+<script src="/js/utils.js" defer></script><script src="/js/motion.js" defer></script><script src="/js/sidebar.js" defer></script><script src="/js/next-boot.js" defer></script>
+
+  
+
+  <script class="next-config" data-name="mermaid" type="application/json">{"enable":true,"theme":{"light":"neutral","dark":"dark"},"js":{"url":"https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.1/mermaid.min.js","integrity":"sha256-BmQmdWDS8X2OTbrwELWK366LV6escyWhHHe0XCTU/Hk="}}</script>
+  <script src="/js/third-party/tags/mermaid.js" defer></script>
+
+
+
+
+
+  
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha256-UF1fgpAiu3tPJN/uCqEUHNe7pnr+QR0SQDNfgglgtcM=" crossorigin="anonymous">
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <div class="column">
+      <header class="header" itemscope itemtype="http://schema.org/WPHeader"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="Toggle navigation bar" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">Rocky Shi</p>
+      <i class="logo-line"></i>
+    </a>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger" aria-label="Search" role="button">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>Home</a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>Archives</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>Tags</a></li><li class="menu-item menu-item-about"><a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>About</a></li><li class="menu-item menu-item-book"><a href="https://book.rockyshi.dev/" rel="section" target="_blank"><i class="fa fa-book fa-fw"></i>book</a></li>
+  </ul>
+</nav>
+
+
+
+
+</header>
+        
+  
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          Table of Contents
+        </li>
+        <li class="sidebar-nav-overview">
+          Overview
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#What-I-measured"><span class="nav-number">1.</span> <span class="nav-text">What I measured</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Why-the-baseline-is-low-to-begin-with"><span class="nav-number">2.</span> <span class="nav-text">Why the baseline is low to begin with</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Streaming-against-offline"><span class="nav-number">3.</span> <span class="nav-text">Streaming against offline</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#A-sentence-written-from-the-glossary"><span class="nav-number">4.</span> <span class="nav-text">A sentence written from the glossary</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Wrong-forms-that-appear-and-are-dropped"><span class="nav-number">5.</span> <span class="nav-text">Wrong forms that appear and are dropped</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Holding-back-the-full-stop"><span class="nav-number">6.</span> <span class="nav-text">Holding back the full stop</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Scope"><span class="nav-number">7.</span> <span class="nav-text">Scope</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Reproduce"><span class="nav-number">8.</span> <span class="nav-text">Reproduce</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+  <p class="site-author-name" itemprop="name">Rocky Shi</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">14</span>
+          <span class="site-state-item-name">posts</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">13</span>
+        <span class="site-state-item-name">tags</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author animated">
+      <span class="links-of-author-item">
+        <a href="https://github.com/rockyshi-dev" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;rockyshi-dev" rel="noopener me" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:hi@rockyshi.dev" title="E-Mail → mailto:hi@rockyshi.dev" rel="noopener me"><i class="fa fa-envelope fa-fw"></i>E-Mail</a>
+      </span>
+  </div>
+
+        </div>
+      </div>
+    </div>
+
+    
+  </aside>
+
+
+    </div>
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="en">
+    <link itemprop="mainEntityOfPage" href="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.gif">
+      <meta itemprop="name" content="Rocky Shi">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Rocky Shi">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="Wrong glossary terms in streaming speech translation: no more than offline | Rocky Shi">
+      <meta itemprop="description" content="I gave a speech LLM a glossary with one wrong entry and translated the same 116 English sentences into Chinese twice: offline on the full audio, and simultaneously on growing 1-second prefixes with local agreement. The wrong term ended up in 11 outputs offline and 12 streaming; the 95% interval of the difference stays below 6% of the items.">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Wrong glossary terms in streaming speech translation: no more than offline
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">Posted on</span>
+      
+
+      <time title="Created: 2026-11-18 17:34:51 / Modified: 17:34:57" itemprop="dateCreated datePublished" datetime="2026-11-18T17:34:51-08:00">2026-11-18</time>
+    </span>
+
+  
+</div>
+
+            <div class="post-description">I gave a speech LLM a glossary with one wrong entry and translated the same 116 English sentences into Chinese twice: offline on the full audio, and simultaneously on growing 1-second prefixes with local agreement. The wrong term ended up in 11 outputs offline and 12 streaming; the 95% interval of the difference stays below 6% of the items.</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody"><p>A speech translation system for talks is often given a glossary: a list of the talk’s terms with the Chinese form the
+speaker or the organiser wants. Glossaries are written by people and some entries are wrong. A model that follows
+the glossary will then write the wrong term. In simultaneous speech translation the model also has to commit to
+text before the sentence is over, while it has heard only part of the audio. My worry was that a model working from
+a half-heard sentence leans harder on the glossary, and so copies a wrong entry more often than when it hears the
+whole sentence.</p>
+<p>I measured it on Qwen2.5-Omni-7B, translating English talks from ACL 60/60 into Chinese. The short answer is no. Of
+116 sentences, the wrong glossary term ended up in the final translation of 11 offline and 12 streaming. I had fixed
+the bar in advance at 10% of the items (11.6 sentences); the 95% interval of the difference reaches at most 5.2%. The
+streaming decoder does put the wrong term into its intermediate hypotheses more often (31 sentences), but most of
+those are dropped before they are committed, and none is committed before the speaker has said the term.</p>
+<span id="more"></span>
+<h2 id="What-I-measured">What I measured</h2>
+<p><strong>Sentences and terms.</strong> ACL 60/60 has English talks from ACL 2022 with reference Chinese translations in which
+technical terms are marked. I took 116 sentences from its dev and eval sets, from 10 talks, each containing one term
+(for example <em>tagger</em>, whose reference form is 标记器). Each sentence is one item.</p>
+<p><strong>Four glossary conditions.</strong> The glossary for an item is the list of its talk’s terms, 7 to 20 entries (median 13),
+one line per term in the form <code>tagger → 标记器</code>. Only the line of the item’s term changes between conditions:</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>The term’s line</th>
+<th>What it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>none</td>
+<td>no glossary at all</td>
+<td>the model on its own</td>
+</tr>
+<tr>
+<td>correct</td>
+<td><code>tagger → 标记器</code></td>
+<td>whether the model uses the glossary</td>
+</tr>
+<tr>
+<td>wrong</td>
+<td><code>tagger → 分类器</code></td>
+<td>how often the model copies a wrong form</td>
+</tr>
+<tr>
+<td>irrelevant</td>
+<td>the line is replaced by an entry for a term that is not in the sentence</td>
+<td>how often the wrong form appears with nothing pointing to it</td>
+</tr>
+</tbody>
+</table>
+<p>The wrong form is the correct Chinese for a different term of the same kind from another talk (分类器 means
+<em>classifier</em>). It is never an acceptable translation of the spoken term. The prompt puts the audio first, then the
+glossary, then the instruction:</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">&lt;audio&gt;Glossary:</span><br><span class="line">KinyaBERT → KinyaBERT</span><br><span class="line">...</span><br><span class="line">tagger → 分类器</span><br><span class="line">...</span><br><span class="line">Use the Chinese forms given in the glossary for the listed terms.</span><br><span class="line">Translate the following English speech into Chinese. Output only the Chinese translation.</span><br></pre></td></tr></table></figure>
+<p><strong>What I count.</strong> An item counts as an insertion if its final translation contains the wrong form under the wrong
+glossary. From that I subtract the items whose translation contains the same form under the irrelevant glossary,
+where nothing in the prompt suggests it. The result is the <strong>insertion count</strong>: the number of sentences in which the
+wrong entry put the wrong term into the translation. Han forms are matched as substrings, Latin forms on word
+boundaries. Each match was then read in its context, with the condition hidden, and judged as either the model’s
+rendering of the spoken term or something else (another sense, part of a longer word, a copy of the glossary list).
+All 23 matches below (11 offline, 12 streaming) were judged renderings of the term.</p>
+<p><strong>Two ways to decode, same model and prompt.</strong> Greedy decoding, at most 256 new tokens, one RTX 4090.</p>
+<ul>
+<li><strong>Offline:</strong> the model gets the whole sentence’s audio and translates once. The segments are 2.1 to 22 s long,
+median 7.4 s.</li>
+<li><strong>Streaming:</strong> the model gets the first 1.0 s of audio, then the first 2.0 s, and so on, until the full segment.
+The output is built with local agreement over two consecutive steps (LA-2; <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2005.11185">Liu, Spanakis and Niehues
+2020</a>, used for simultaneous speech translation by <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2204.06028">Polák et al.
+2022</a>). At each step, the text committed so far is forced as the start of the
+model’s answer and the model continues from it. The longest common prefix of the last two steps’ continuations is
+committed and can no longer change. At the last step, with the full audio, the whole continuation is committed.</li>
+</ul>
+<p>The prompt, the glossary and the weights are the same in both. The only difference is whether the model sees the
+whole audio at once or growing prefixes of it.</p>
+<p>How simultaneous is the streaming output? I measured latency on the audio clock (compute time not included), with
+each Chinese character timed at the step that committed it. Under the wrong glossary, LAAL (<a target="_blank" rel="noopener" href="https://arxiv.org/abs/2206.05807">Papi et al.
+2022</a>) is 2.4 s and AL (<a target="_blank" rel="noopener" href="https://arxiv.org/abs/1810.08398">Ma et al. 2019</a>) is
+2.2 s, on sentences whose median length is 7.4 s.</p>
+<h2 id="Why-the-baseline-is-low-to-begin-with">Why the baseline is low to begin with</h2>
+<p>The speech LLMs I tested were already reluctant to copy a wrong glossary entry offline. The same prompt and the same
+116 items, with the counts on the same definition:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Input</th>
+<th>Insertion count, of 116</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen2.5-7B-Instruct (text-only LLM)</td>
+<td>gold English transcript</td>
+<td>59</td>
+</tr>
+<tr>
+<td>Qwen2-Audio-7B-Instruct</td>
+<td>gold English transcript</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Qwen2.5-Omni-7B</td>
+<td>gold English transcript</td>
+<td>7</td>
+</tr>
+<tr>
+<td>Qwen2.5-Omni-7B</td>
+<td>audio, offline</td>
+<td>11</td>
+</tr>
+</tbody>
+</table>
+<p>A text-only LLM given the transcript writes the wrong term in about half the sentences. The speech LLMs do it in a
+handful, from text and from audio alike. Qwen2-Audio uses correct glossary entries and declines wrong ones even
+when told to use the glossary. So the question for streaming is whether partial audio pushes a speech LLM from
+the low row towards the high one.</p>
+<p>The model does read the glossary while streaming: in the correct condition, 10 of 10 sampled streaming outputs
+used the glossary’s form for the term.</p>
+<h2 id="Streaming-against-offline">Streaming against offline</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Offline</th>
+<th>Streaming (LA-2, 1.0 s steps)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wrong form in the output, wrong glossary</td>
+<td>11</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Wrong form in the output, irrelevant glossary</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>Insertion count</strong></td>
+<td><strong>11</strong></td>
+<td><strong>12</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The difference is +1 sentence. Three sentences have the wrong term only in the streaming output, two only in the
+offline output; the other nine have it in both.</p>
+<p>To get an interval I resampled the 10 talks with replacement 9,999 times, because sentences from one talk share a
+speaker and a glossary. The 95% interval of the difference, as a share of the 116 items, is −0.035 to 0.052. Its
+upper end, about 6 sentences, is below the 10% bar (11.6 sentences) I set before decoding. A rise of a few sentences
+is not excluded; a rise of 10% of the items is.</p>
+<img src="/posts/streaming-speech-translation-wrong-glossary/difference.svg" class="" title="Insertion count, offline and streaming " alt="Bars: wrong glossary term inserted in 11 of 116 items offline and 12 streaming. Below: the difference, +1, with its 95 percent interval from -4.0 to +6.0 items, left of the 11.6-item bar fixed before decoding">
+<p>The five sentences that differ are worth reading, because they are not one effect:</p>
+<table>
+<thead>
+<tr>
+<th>Sentence</th>
+<th>Term → correct / wrong form</th>
+<th>Offline</th>
+<th>Streaming</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>dev 119</td>
+<td>oracle → 甲骨文 / 可解释性</td>
+<td>可解释的 (“interpretable”)</td>
+<td>可解释性 (“interpretability”)</td>
+</tr>
+<tr>
+<td>dev 147</td>
+<td>tagger → 标记器 / 分类器</td>
+<td>分词器 (“tokenizer”)</td>
+<td>a sentence assembled from the glossary, below</td>
+</tr>
+<tr>
+<td>eval 185</td>
+<td>VALSE → VALSE / MAWPS</td>
+<td>VALSE</td>
+<td>VALSE（MAWPS）</td>
+</tr>
+<tr>
+<td>dev 44</td>
+<td>OOV → OOV / API</td>
+<td>API</td>
+<td>OOV</td>
+</tr>
+<tr>
+<td>eval 251</td>
+<td>extractor → 提取器 / 解码器</td>
+<td>文本解码器 (“text decoder”)</td>
+<td>提取器</td>
+</tr>
+</tbody>
+</table>
+<p>In dev 119 both outputs follow the wrong entry; the offline one changed one character and so escaped the string
+match. Eval 185 is a real streaming insertion: the model kept the correct name and attached the wrong one in
+brackets. Dev 44 and eval 251 go the other way: offline copied the wrong entry and streaming did not. Dev 147 is the
+interesting one.</p>
+<h2 id="A-sentence-written-from-the-glossary">A sentence written from the glossary</h2>
+<p>Dev 147 is “The part of speech tagger uses a bidi bidirectional inference which improves upon the more often used
+Viterbi algorithm for decoding.” (10.6 s). In the forced alignment of the transcript, <em>tagger</em> ends at 1.5 s and
+<em>bidirectional</em> at 3.26 s. Here is what the streaming decoder did under the wrong glossary:</p>
+<table>
+<thead>
+<tr>
+<th>Audio heard</th>
+<th>Hypothesis at this step</th>
+<th>Committed after this step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0 s: “The part of speech”</td>
+<td>演讲的语法部分 (“the grammar part of the speech”)</td>
+<td>nothing</td>
+</tr>
+<tr>
+<td>2.0 s: “… tagger uses a”</td>
+<td>KinyaBERT 使用了 BERT 的标记化和 BPE，同时实现了无监督的多语言句法分类器。 (“KinyaBERT uses BERT’s tokenization and BPE, and implements an unsupervised multilingual syntactic classifier.”)</td>
+<td>nothing</td>
+</tr>
+<tr>
+<td>3.0 s: “… bidi”</td>
+<td>the same sentence</td>
+<td>the whole sentence except the final 。</td>
+</tr>
+<tr>
+<td>4.0 and 5.0 s</td>
+<td>the same sentence</td>
+<td>no change</td>
+</tr>
+<tr>
+<td>6.0 s: “… inference which improves upon”</td>
+<td>the same sentence + ，通过双向推理提高了分类器的性能 (“, improving the classifier with bidirectional inference”)</td>
+<td>no change</td>
+</tr>
+<tr>
+<td>7.0 to 10.0 s</td>
+<td>the same sentence as at 2.0 s</td>
+<td>no change</td>
+</tr>
+<tr>
+<td>10.6 s, full audio</td>
+<td>the same sentence</td>
+<td>the final 。</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/streaming-speech-translation-wrong-glossary/la2-dev147.svg" class="" title="LA-2 on dev 147 under the wrong glossary " alt="Time axis of audio heard from 1.0 to 10.6 s. The hypothesis at 2.0 s is a sentence built from glossary entries, with classifier for tagger; it repeats at 3.0 s and is committed. The extension at 6.0 s is dropped at 7.0 s and never committed. Tagger ends at 1.5 s; Viterbi is spoken at 7.82 to 8.56 s and never appears">
+<p>At 2.0 s the model had heard seven words. It wrote a complete sentence out of glossary entries: KinyaBERT, BERT,
+tokenization (标记化), BPE, unsupervised (无监督), multilingual (多语言), syntactic (句法) and the wrong entry for
+tagger (分类器). “Syntactic classifier” can be read as the model’s rendering of “part of speech tagger” with the
+glossary’s wrong form, which is how the match was judged; the rest of the sentence is not in the audio. At 3.0 s the
+model produced the same sentence again, so LA-2 committed it. From then on the committed text could not change. At
+6.0 s the model tried to add the bidirectional inference, but the next step dropped it again, so the two steps never
+agreed and it was never committed. The Viterbi algorithm, said between 7.8 and 9.1 s, never appears.</p>
+<p>Offline, under the same wrong glossary, the model translated the sentence (“分词器使用双向推理，这在解码时比更常用的
+维特比算法有所改进”, with <em>tokenizer</em> for <em>tagger</em>) and did not use 分类器. Under the irrelevant glossary the streaming
+decoder started the same way: at 2.0 s it wrote a long paragraph about KinyaBERT. But there the next step did not
+repeat it word for word, so LA-2 committed only “KinyaBERT 使用了 BERT 的标记化” at 3.0 s. That opening stayed, but the
+later steps did bring in the audio: bidirectional inference (双向推理) was committed at 5.0 and 6.0 s, and the last step
+added “用于解码” (for decoding). The Viterbi algorithm reached the hypotheses at 9.0 and 10.0 s and was not committed.</p>
+<p>So local agreement is a filter only against hypotheses that change from step to step. A hallucination the model
+repeats twice gets committed. If dev 147 is counted as a glossary copy rather than an insertion, the difference
+between streaming and offline is 0 instead of +1.</p>
+<h2 id="Wrong-forms-that-appear-and-are-dropped">Wrong forms that appear and are dropped</h2>
+<p>Each streaming step writes a full hypothesis, of which only the agreed prefix is committed. Counting the wrong form
+in any hypothesis, committed or not:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Wrong glossary (its wrong form)</th>
+<th>Irrelevant glossary (its unrelated entry’s form)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Items where the form appears in some hypothesis</td>
+<td>31</td>
+<td>23</td>
+</tr>
+<tr>
+<td>Items where it is in the final output</td>
+<td>12</td>
+<td>1</td>
+</tr>
+<tr>
+<td>… committed before the spoken term ends</td>
+<td>0 of 12</td>
+<td>0 of 1</td>
+</tr>
+</tbody>
+</table>
+<img src="/posts/streaming-speech-translation-wrong-glossary/hypotheses.svg" class="" title="Glossary forms in hypotheses and in final outputs " alt="Wrong glossary: its wrong form appears in some streaming hypothesis in 31 items and in the final output in 12. Irrelevant glossary: its unrelated form appears in 23 and stays in 1">
+<p>The wrong form showed up in a hypothesis of 31 sentences and stayed in 12; in the other 19 it was only in
+uncommitted text that a later step replaced. The irrelevant glossary’s form, for a term nobody said, showed up in
+23 and stayed in 1, so a glossary entry leaking into a partial hypothesis is common whether or not the term is
+spoken. None of the 12 wrong forms was committed before the alignment says the speaker finished saying the term.
+Wrong commitments made in anticipation of the speaker were not a source of insertions here.</p>
+<h2 id="Holding-back-the-full-stop">Holding back the full stop</h2>
+<p>One design choice in the streaming policy matters more than it looks. The committed text is forced as the start of
+the model’s answer. If the commit ends with a sentence-final mark such as 。, the model ends its answer right there at
+every later step, however much audio is left.</p>
+<p>I therefore hold back a trailing sentence-final mark or closing quote: while the committed text would end in one, it
+is shortened by whole tokens, and the mark is committed later together with the text that follows it, or at the
+last step. Over the 696 streaming outputs (116 items, four conditions, the no-glossary condition decoded three
+times):</p>
+<table>
+<thead>
+<tr>
+<th>Policy</th>
+<th>Outputs that stop with 3 s or more of audio left</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plain LA-2</td>
+<td>36 of 696</td>
+</tr>
+<tr>
+<td>LA-2 with the sentence-final mark held back</td>
+<td>1 of 696</td>
+</tr>
+</tbody>
+</table>
+<p>In all 36 stops under plain LA-2, the committed text ended in 。 and every later step generated nothing. The one
+remaining stop is dev 147 above: the model kept repeating its glossary sentence, whose 。 was held back, and added
+nothing.</p>
+<h2 id="Scope">Scope</h2>
+<p>Qwen2.5-Omni-7B, English to Chinese on 116 sentences from 10 ACL 60/60 talks, one wrong glossary entry per sentence,
+greedy decoding, LA-2 on 1.0 s steps of audio. At this size, a true rise of about 15 sentences would be detected in
+about four of five repetitions of the experiment; a rise of 5 almost never.</p>
+<h2 id="Reproduce">Reproduce</h2>
+<p>The code, the model outputs and the hand codes are in
+<a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/streaming-st-glossary">rockyshi-dev/streaming-st-glossary</a>. Every number in this
+post comes from one command that needs only Python 3 and a CPU and finishes in seconds:</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://github.com/rockyshi-dev/streaming-st-glossary &amp;&amp; <span class="built_in">cd</span> streaming-st-glossary</span><br><span class="line">python3 -m stglossary.recount</span><br></pre></td></tr></table></figure>
+<p>To decode again, you need the ACL 60/60 audio (948 MB, downloaded from the ACL Anthology), the model weights at the
+revisions listed in the README, and one 24 GB GPU. On an RTX 4090 the offline decodes take about 7 minutes and the
+streaming decodes about 32 minutes; the README gives the commands and the step that compares new outputs with the
+published ones.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/measurement/" rel="tag"># measurement</a>
+              <a href="/tags/speech/" rel="tag"># speech</a>
+              <a href="/tags/LLM/" rel="tag"># LLM</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/posts/asr-word-latency-breakdown/" rel="prev" title="Streaming ASR word latency: why a shorter chunk saves less than the arithmetic says">
+                  <i class="fa fa-angle-left"></i> Streaming ASR word latency: why a shorter chunk saves less than the arithmetic says
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="copyright">
+    &copy; 
+    <span itemprop="copyrightYear">2026</span>
+    <span class="with-love">
+      <i class="fa fa-heart"></i>
+    </span>
+    <span class="author" itemprop="copyrightHolder">Rocky Shi</span>
+  </div>
+  <div class="powered-by">Powered by <a href="https://hexo.io/" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" rel="noopener" target="_blank">NexT.Gemini</a>
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+  <div class="sidebar-dimmer"></div>
+  <div class="back-to-top" role="button" aria-label="Back to top">
+    <i class="fa fa-arrow-up fa-lg"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+</body>
+</html>
