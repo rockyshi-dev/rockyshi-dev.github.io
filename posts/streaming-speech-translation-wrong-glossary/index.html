@@ -28,10 +28,10 @@
 <meta property="og:description" content="I gave a speech LLM a glossary with one wrong entry and translated the same 116 English sentences into Chinese twice: offline on the full audio, and simultaneously on growing 1-second prefixes with lo">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/difference.svg">
-<meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/la2-dev147.svg">
+<meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/la2-test1676.svg">
 <meta property="og:image" content="https://rockyshi.dev/posts/streaming-speech-translation-wrong-glossary/hypotheses.svg">
 <meta property="article:published_time" content="2026-11-19T01:34:51.000Z">
-<meta property="article:modified_time" content="2026-11-19T01:34:57.000Z">
+<meta property="article:modified_time" content="2026-11-19T08:18:11.000Z">
 <meta property="article:author" content="Rocky Shi">
 <meta property="article:tag" content="LLM">
 <meta property="article:tag" content="measurement">
@@ -223,9 +223,15 @@
         <i class="far fa-calendar"></i>
       </span>
       <span class="post-meta-item-text">Posted on</span>
-      
 
-      <time title="Created: 2026-11-18 17:34:51 / Modified: 17:34:57" itemprop="dateCreated datePublished" datetime="2026-11-18T17:34:51-08:00">2026-11-18</time>
+      <time title="Created: 2026-11-18 17:34:51" itemprop="dateCreated datePublished" datetime="2026-11-18T17:34:51-08:00">2026-11-18</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar-check"></i>
+      </span>
+      <span class="post-meta-item-text">Edited on</span>
+      <time title="Modified: 2026-11-19 00:18:11" itemprop="dateModified" datetime="2026-11-19T00:18:11-08:00">2026-11-19</time>
     </span>
 
   
@@ -238,7 +244,13 @@
     
     
     
-    <div class="post-body" itemprop="articleBody"><p>A speech translation system for talks is often given a glossary: a list of the talk’s terms with the Chinese form the
+    <div class="post-body" itemprop="articleBody"><blockquote>
+<p><strong>Updated 2026-11-18.</strong> The example of a sentence written from the glossary was dev 147, a sentence about NLP
+models, in which the glossary’s words and the speaker’s are hard to tell apart. The section now shows a case from
+everyday read speech (<a target="_blank" rel="noopener" href="https://huggingface.co/datasets/google/fleurs">FLEURS</a>), decoded the same way; its code and
+outputs are in the companion repository. The measurement and its numbers are unchanged.</p>
+</blockquote>
+<p>A speech translation system for talks is often given a glossary: a list of the talk’s terms with the Chinese form the
 speaker or the organiser wants. Glossaries are written by people and some entries are wrong. A model that follows
 the glossary will then write the wrong term. In simultaneous speech translation the model also has to commit to
 text before the sentence is over, while it has heard only part of the audio. My worry was that a model working from
@@ -248,7 +260,8 @@ whole sentence.</p>
 116 sentences, the wrong glossary term ended up in the final translation of 11 offline and 12 streaming. I had fixed
 the bar in advance at 10% of the items (11.6 sentences); the 95% interval of the difference reaches at most 5.2%. The
 streaming decoder does put the wrong term into its intermediate hypotheses more often (31 sentences), but most of
-those are dropped before they are committed, and none is committed before the speaker has said the term.</p>
+those are dropped before they are committed, and none is committed before the speaker has said the term. On
+everyday read speech the same decoder does sometimes commit a sentence the speaker never said; I show one below.</p>
 <span id="more"></span>
 <h2 id="What-I-measured">What I measured</h2>
 <p><strong>Sentences and terms.</strong> ACL 60/60 has English talks from ACL 2022 with reference Chinese translations in which
@@ -435,11 +448,32 @@ is not excluded; a rise of 10% of the items is.</p>
 <p>In dev 119 both outputs follow the wrong entry; the offline one changed one character and so escaped the string
 match. Eval 185 is a real streaming insertion: the model kept the correct name and attached the wrong one in
 brackets. Dev 44 and eval 251 go the other way: offline copied the wrong entry and streaming did not. Dev 147 is the
-interesting one.</p>
+interesting one; it is the next section.</p>
 <h2 id="A-sentence-written-from-the-glossary">A sentence written from the glossary</h2>
-<p>Dev 147 is “The part of speech tagger uses a bidi bidirectional inference which improves upon the more often used
-Viterbi algorithm for decoding.” (10.6 s). In the forced alignment of the transcript, <em>tagger</em> ends at 1.5 s and
-<em>bidirectional</em> at 3.26 s. Here is what the streaming decoder did under the wrong glossary:</p>
+<p>Dev 147 is a sentence about a part-of-speech tagger. At 2.0 s the model had heard seven words. It wrote a complete
+sentence out of the talk’s glossary, with the wrong entry for <em>tagger</em> (分类器, <em>classifier</em>) in it. The next step
+repeated that sentence word for word, so LA-2 committed it, and the committed text could not change after that.
+Offline, under the same glossary, the model translated the sentence and did not use 分类器. If dev 147 is counted as a
+glossary copy rather than an insertion, the difference between streaming and offline is 0 instead of +1.</p>
+<p>Dev 147 is itself about language models, so in it the glossary’s words and the speaker’s words are hard to tell apart.
+To see the same thing on everyday speech, I ran the streaming decoder, with the same model, prompt and LA-2 policy, on
+<a target="_blank" rel="noopener" href="https://huggingface.co/datasets/google/fleurs">FLEURS</a>: English sentences from Wikipedia, Wikivoyage and Wikinews,
+read aloud, with the Chinese translations of <a target="_blank" rel="noopener" href="https://github.com/facebookresearch/flores/tree/main/flores200">FLoRes-200</a>.
+Each source article plays the role of a talk. Its glossary lists the article’s names and terms with their Chinese forms
+from the reference translation (listed by Qwen2.5-7B-Instruct), and each sentence again gets one wrong entry, the form
+of a term of the same kind from another article. I left out articles about computing and language technology. That
+gives 225 sentences of 8 to 30 s.</p>
+<p>Before decoding I fixed what counts as a sentence written from the glossary: one step commits the Chinese forms of at
+least two glossary terms that the speaker has not said yet, and that text stays in the final translation. Under the
+wrong glossary 37 of the 225 sentences meet this rule; under the correct and the irrelevant glossaries, 42 and 32. In
+some of them the model only translated words the speaker said a moment later. In others the committed text is not in
+the sentence at all.</p>
+<p>Test 1676 is one of the second kind. It comes from the Wikivoyage article on Kruger National Park: “As with all South
+African National Parks, there are daily conservation and entry fees for the park.” (9.4 s). Its glossary has eight
+entries: Kruger National Park, KNP, Mozambique, Zimbabwe, Crocodile River, South Africa, South African National Parks
+and Wild Card. In the wrong glossary the line for the sentence’s term reads <code>South African National Parks → 总统委员会</code>
+(“Presidential Commission”). In the forced alignment, <em>South African National Parks</em> is spoken from 1.64 to 3.44 s.
+Here is what the streaming decoder did under the wrong glossary:</p>
 <table>
 <thead>
 <tr>
@@ -450,59 +484,68 @@ Viterbi algorithm for decoding.” (10.6 s). In the forced alignment of the tran
 </thead>
 <tbody>
 <tr>
-<td>1.0 s: “The part of speech”</td>
-<td>演讲的语法部分 (“the grammar part of the speech”)</td>
+<td>1.0 s: the first word, not finished</td>
+<td>克鲁格国家公园位于南非，是非洲最大的国家公园之一。它横跨莫桑比克和津巴布韦的边界… (“Kruger National Park is in South Africa and is one of Africa’s largest national parks. It straddles the border of Mozambique and Zimbabwe …”)</td>
 <td>nothing</td>
 </tr>
 <tr>
-<td>2.0 s: “… tagger uses a”</td>
-<td>KinyaBERT 使用了 BERT 的标记化和 BPE，同时实现了无监督的多语言句法分类器。 (“KinyaBERT uses BERT’s tokenization and BPE, and implements an unsupervised multilingual syntactic classifier.”)</td>
-<td>nothing</td>
+<td>2.0 s: “As with all”</td>
+<td>克鲁格国家公园位于南非，是总统委员会管理的国家公园之一。 (“Kruger National Park is in South Africa and is one of the national parks run by the Presidential Commission.”)</td>
+<td>克鲁格国家公园位于南非，是 (“Kruger National Park is in South Africa and is”)</td>
 </tr>
 <tr>
-<td>3.0 s: “… bidi”</td>
-<td>the same sentence</td>
-<td>the whole sentence except the final 。</td>
+<td>3.0 s: “… South African National”</td>
+<td>the same sentence + 它与莫桑比克和津巴布韦接壤。… (“It borders Mozambique and Zimbabwe. …”)</td>
+<td>+ 总统委员会管理的国家公园之一 (“one of the national parks run by the Presidential Commission”)</td>
 </tr>
 <tr>
-<td>4.0 and 5.0 s</td>
-<td>the same sentence</td>
+<td>4.0 to 6.0 s: “… Parks, there are daily conservation”</td>
+<td>the sentence of 2.0 s</td>
 <td>no change</td>
 </tr>
 <tr>
-<td>6.0 s: “… inference which improves upon”</td>
-<td>the same sentence + ，通过双向推理提高了分类器的性能 (“, improving the classifier with bidirectional inference”)</td>
+<td>7.0 s: “… and entry fees”</td>
+<td>the same + 与其他南非国家公园一样，克鲁格国家公园设有每日保护和入场费。 (“Like other South African national parks, Kruger National Park has daily conservation and entry fees.”)</td>
 <td>no change</td>
 </tr>
 <tr>
-<td>7.0 to 10.0 s</td>
-<td>the same sentence as at 2.0 s</td>
+<td>8.0 s: “… for the”</td>
+<td>the same</td>
+<td>+ 。与其他南非国家公园一样，克鲁格国家公园设有每日</td>
+</tr>
+<tr>
+<td>9.0 s: “… park.”</td>
+<td>the same</td>
 <td>no change</td>
 </tr>
 <tr>
-<td>10.6 s, full audio</td>
-<td>the same sentence</td>
-<td>the final 。</td>
+<td>9.4 s, full audio</td>
+<td>the same</td>
+<td>+ 保护和入场费。</td>
 </tr>
 </tbody>
 </table>
-<img src="/posts/streaming-speech-translation-wrong-glossary/la2-dev147.svg" class="" title="LA-2 on dev 147 under the wrong glossary " alt="Time axis of audio heard from 1.0 to 10.6 s. The hypothesis at 2.0 s is a sentence built from glossary entries, with classifier for tagger; it repeats at 3.0 s and is committed. The extension at 6.0 s is dropped at 7.0 s and never committed. Tagger ends at 1.5 s; Viterbi is spoken at 7.82 to 8.56 s and never appears">
-<p>At 2.0 s the model had heard seven words. It wrote a complete sentence out of glossary entries: KinyaBERT, BERT,
-tokenization (标记化), BPE, unsupervised (无监督), multilingual (多语言), syntactic (句法) and the wrong entry for
-tagger (分类器). “Syntactic classifier” can be read as the model’s rendering of “part of speech tagger” with the
-glossary’s wrong form, which is how the match was judged; the rest of the sentence is not in the audio. At 3.0 s the
-model produced the same sentence again, so LA-2 committed it. From then on the committed text could not change. At
-6.0 s the model tried to add the bidirectional inference, but the next step dropped it again, so the two steps never
-agreed and it was never committed. The Viterbi algorithm, said between 7.8 and 9.1 s, never appears.</p>
-<p>Offline, under the same wrong glossary, the model translated the sentence (“分词器使用双向推理，这在解码时比更常用的
-维特比算法有所改进”, with <em>tokenizer</em> for <em>tagger</em>) and did not use 分类器. Under the irrelevant glossary the streaming
-decoder started the same way: at 2.0 s it wrote a long paragraph about KinyaBERT. But there the next step did not
-repeat it word for word, so LA-2 committed only “KinyaBERT 使用了 BERT 的标记化” at 3.0 s. That opening stayed, but the
-later steps did bring in the audio: bidirectional inference (双向推理) was committed at 5.0 and 6.0 s, and the last step
-added “用于解码” (for decoding). The Viterbi algorithm reached the hypotheses at 9.0 and 10.0 s and was not committed.</p>
-<p>So local agreement is a filter only against hypotheses that change from step to step. A hallucination the model
-repeats twice gets committed. If dev 147 is counted as a glossary copy rather than an insertion, the difference
-between streaming and offline is 0 instead of +1.</p>
+<img src="/posts/streaming-speech-translation-wrong-glossary/la2-test1676.svg" class="" title="LA-2 on FLEURS test 1676 under the wrong glossary " alt="Time axis of audio heard from 1.0 to 9.4 s. At 2.0 s the hypothesis is a sentence built from glossary entries, Kruger National Park is in South Africa and is one of the national parks run by the Presidential Commission; its start is committed at 2.0 s and the rest at 3.0 s, while South African National Parks is still being spoken. The translation of what is said appears from 7.0 s and is committed after it at 8.0 and 9.4 s">
+<p>At 2.0 s the model had heard three words. It wrote a sentence the speaker never says, built from glossary entries:
+Kruger National Park (克鲁格国家公园), South Africa (南非) and the wrong entry 总统委员会. With the correct entry the
+sentence would be true, since South African National Parks runs the park. LA-2 committed the part that the 1.0 s and
+2.0 s hypotheses share. At 3.0 s the model wrote the 2.0 s sentence again, so the rest of it, with 总统委员会, was
+committed too. At that moment the speaker was in the middle of <em>Parks</em>. Kruger is never named in the audio. From 7.0 s
+the model translated what was said and appended it after the committed sentence. The final translation is: “Kruger
+National Park is in South Africa and is one of the national parks run by the Presidential Commission. Like other South
+African national parks, Kruger National Park has daily conservation and entry fees.” The second sentence is the
+translation. The first one was written from the glossary.</p>
+<p>Under the correct glossary the decoder committed “克鲁格国家公园位于南非，是非洲最大的国家公园之一” (“Kruger National
+Park is in South Africa and is one of Africa’s largest national parks”) at 2.0 s. Its final translation goes on about
+the park’s area, lions and elephants, and never mentions the fees. Under the irrelevant glossary it committed
+“克鲁格国家公园的悲剧事故” (“the tragic accident at Kruger National Park”, from the irrelevant entry <em>this tragic
+accident</em>) by 3.0 s, and then translated the sentence after it.</p>
+<p>So local agreement is a filter only against hypotheses that change from step to step. A sentence the model writes
+twice from the glossary gets committed, whatever the audio says next. On the ACL 60/60 talks no wrong form was
+committed before the speaker had said the term. On these FLEURS sentences it happened: under the wrong glossary the
+wrong form reached the final translation of 44 of the 225 sentences, and in 6 of them it was committed before the
+speaker had finished the term. I did not decode the FLEURS sentences offline, so these counts do not compare streaming
+with offline.</p>
 <h2 id="Wrong-forms-that-appear-and-are-dropped">Wrong forms that appear and are dropped</h2>
 <p>Each streaming step writes a full hypothesis, of which only the agreed prefix is committed. Counting the wrong form
 in any hypothesis, committed or not:</p>
@@ -574,12 +617,12 @@ about four of five repetitions of the experiment; a rise of 5 almost never.</p>
 <h2 id="Reproduce">Reproduce</h2>
 <p>The code, the model outputs and the hand codes are in
 <a target="_blank" rel="noopener" href="https://github.com/rockyshi-dev/streaming-st-glossary">rockyshi-dev/streaming-st-glossary</a>. Every number in this
-post comes from one command that needs only Python 3 and a CPU and finishes in seconds:</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://github.com/rockyshi-dev/streaming-st-glossary &amp;&amp; <span class="built_in">cd</span> streaming-st-glossary</span><br><span class="line">python3 -m stglossary.recount</span><br></pre></td></tr></table></figure>
+post comes from a few commands that need only Python 3 and a CPU and finish in seconds:</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">git <span class="built_in">clone</span> https://github.com/rockyshi-dev/streaming-st-glossary &amp;&amp; <span class="built_in">cd</span> streaming-st-glossary</span><br><span class="line">python3 -m stglossary.recount        <span class="comment"># ACL 60/60: streaming against offline</span></span><br><span class="line">python3 -m fleurs.scan --stream data/fleurs/stream.jsonl --align data/fleurs/align.jsonl \</span><br><span class="line">    --sentences data/fleurs/sentences.jsonl --out scan.json      <span class="comment"># FLEURS: sentences written from the glossary</span></span><br><span class="line">python3 -m fleurs.early_probe --stream data/fleurs/stream.jsonl --align data/fleurs/align.jsonl \</span><br><span class="line">    --sentences data/fleurs/sentences.jsonl                      <span class="comment"># FLEURS: wrong forms committed early</span></span><br></pre></td></tr></table></figure>
 <p>To decode again, you need the ACL 60/60 audio (948 MB, downloaded from the ACL Anthology), the model weights at the
 revisions listed in the README, and one 24 GB GPU. On an RTX 4090 the offline decodes take about 7 minutes and the
 streaming decodes about 32 minutes; the README gives the commands and the step that compares new outputs with the
-published ones.</p>
+published ones, for the ACL 60/60 decodes and for the FLEURS example, which takes about an hour on the same GPU.</p>
 
     </div>
 
